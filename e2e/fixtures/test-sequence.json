@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "meta": {
+    "name": "Test Sequence",
+    "description": "E2E test sequence",
+    "author": "test",
+    "created_at": "2026-04-26T00:00:00Z",
+    "updated_at": "2026-04-26T00:00:00Z"
+  },
+  "url_pattern": "https://example.com/gallery/{index:start=1,to=3}",
+  "selectors": {
+    "media": ".gallery img",
+    "folder_name": "h1.title",
+    "file_name": null
+  },
+  "naming": {
+    "folder": "test_gallery",
+    "folder_source": "literal",
+    "file": "{date}_{index}",
+    "file_source": "pattern"
+  }
+}
