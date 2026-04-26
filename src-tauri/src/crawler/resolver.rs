@@ -5,7 +5,6 @@ pub struct ResolvedMedia {
     pub page_url: String,
     pub media_url: String,
     pub folder_name: Option<String>,
-    pub file_name_hint: Option<String>,
 }
 
 pub async fn resolve_urls(
@@ -13,7 +12,6 @@ pub async fn resolve_urls(
     url_pattern: &str,
     media_selector: &str,
     folder_selector: Option<&str>,
-    file_selector: Option<&str>,
     on_progress: impl Fn(usize),
 ) -> Result<Vec<ResolvedMedia>, Box<dyn std::error::Error + Send + Sync>> {
     let parsed = parse_url_pattern(url_pattern)?;
@@ -25,7 +23,7 @@ pub async fn resolve_urls(
     let urls = parsed.generate_urls();
 
     for (i, url) in urls.iter().enumerate() {
-        let result = fetch_page(client, url, media_selector, folder_selector, file_selector).await;
+        let result = fetch_page(client, url, media_selector, folder_selector).await;
 
         match result {
             Ok(fetch_result) => {
@@ -37,7 +35,6 @@ pub async fn resolve_urls(
                         page_url: fetch_result.page_url.clone(),
                         media_url,
                         folder_name: fetch_result.folder_name.clone(),
-                        file_name_hint: fetch_result.file_name_hint.clone(),
                     });
                 }
             }

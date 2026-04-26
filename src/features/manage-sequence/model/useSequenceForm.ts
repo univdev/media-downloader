@@ -6,7 +6,6 @@ export interface SequenceFormErrors {
   url_pattern?: string;
   media_selector?: string;
   folder_pattern?: string;
-  file_pattern?: string;
 }
 
 const INVALID_NAME_CHARS = /[\\/:*?"<>|]/;
@@ -18,8 +17,6 @@ function validateName(name: string): string | undefined {
   }
   return undefined;
 }
-
-const FILE_PATTERN_TOKENS = ["{index}", "{date}", "{datetime}"];
 
 function validateUrlPattern(pattern: string): string | undefined {
   if (!pattern.trim()) return "URL 패턴을 입력해주세요";
@@ -39,30 +36,14 @@ function validateFolderPattern(pattern: string): string | undefined {
   return undefined;
 }
 
-function validateFilePattern(pattern: string, source: string): string | undefined {
-  if (!pattern.trim()) return "파일명 패턴을 입력해주세요";
-  if (source === "pattern") {
-    const hasToken = FILE_PATTERN_TOKENS.some((token) => pattern.includes(token));
-    if (!hasToken) {
-      return "파일명 패턴에 최소 1개의 토큰({index}, {date}, {datetime})을 포함해야 합니다";
-    }
-  }
-  return undefined;
-}
-
 export function useSequenceForm(initial?: Sequence) {
   const [urlPattern, setUrlPattern] = useState(initial?.url_pattern ?? "");
   const [mediaUrlPattern, setMediaUrlPattern] = useState(initial?.media_url_pattern ?? "");
   const [mediaSelector, setMediaSelector] = useState(initial?.selectors.media ?? "");
   const [folderNameSelector, setFolderNameSelector] = useState(initial?.selectors.folder_name ?? "");
-  const [fileNameSelector, setFileNameSelector] = useState(initial?.selectors.file_name ?? "");
   const [folderPattern, setFolderPattern] = useState(initial?.naming.folder ?? "");
   const [folderSource, setFolderSource] = useState<"literal" | "selector">(
     initial?.naming.folder_source ?? "literal"
-  );
-  const [filePattern, setFilePattern] = useState(initial?.naming.file ?? "{date}_{index}");
-  const [fileSource, setFileSource] = useState<"pattern" | "selector">(
-    initial?.naming.file_source ?? "pattern"
   );
   const [name, setName] = useState(initial?.meta.name ?? "");
   const [description, setDescription] = useState(initial?.meta.description ?? "");
@@ -74,12 +55,11 @@ export function useSequenceForm(initial?: Sequence) {
       url_pattern: validateUrlPattern(urlPattern),
       media_selector: validateMediaSelector(mediaSelector),
       folder_pattern: validateFolderPattern(folderPattern),
-      file_pattern: validateFilePattern(filePattern, fileSource),
     };
 
     setErrors(newErrors);
     return !Object.values(newErrors).some(Boolean);
-  }, [name, urlPattern, mediaSelector, folderPattern, filePattern, fileSource]);
+  }, [name, urlPattern, mediaSelector, folderPattern]);
 
   const toJson = useCallback((): string => {
     const now = new Date().toISOString();
@@ -97,20 +77,17 @@ export function useSequenceForm(initial?: Sequence) {
       selectors: {
         media: mediaSelector,
         folder_name: folderSource === "selector" ? folderNameSelector : null,
-        file_name: fileSource === "selector" ? fileNameSelector : null,
       },
       naming: {
         folder: folderPattern,
         folder_source: folderSource,
-        file: filePattern,
-        file_source: fileSource,
       },
     };
     return JSON.stringify(sequence, null, 2);
   }, [
     name, description, urlPattern, mediaUrlPattern, mediaSelector,
-    folderNameSelector, fileNameSelector,
-    folderPattern, folderSource, filePattern, fileSource, initial,
+    folderNameSelector,
+    folderPattern, folderSource, initial,
   ]);
 
   const copyEntryToMedia = useCallback(() => {
@@ -125,11 +102,8 @@ export function useSequenceForm(initial?: Sequence) {
     copyEntryToMedia,
     mediaSelector, setMediaSelector,
     folderNameSelector, setFolderNameSelector,
-    fileNameSelector, setFileNameSelector,
     folderPattern, setFolderPattern,
     folderSource, setFolderSource,
-    filePattern, setFilePattern,
-    fileSource, setFileSource,
     errors,
     validate,
     toJson,

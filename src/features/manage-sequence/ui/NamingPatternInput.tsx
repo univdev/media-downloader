@@ -1,10 +1,13 @@
+import { SelectorList } from "./SelectorList";
+
 interface NamingPatternInputProps {
   label: string;
   pattern: string;
-  source: string;
+  source: "literal" | "selector";
   selectorValue: string;
+  selectorTargetField: "media" | "folder_name";
+  selectorParentLabel: string;
   sourceOptions: { value: string; label: string }[];
-  tokens?: { value: string; label: string }[];
   error?: string;
   onPatternChange: (value: string) => void;
   onSourceChange: (value: string) => void;
@@ -16,8 +19,9 @@ export function NamingPatternInput({
   pattern,
   source,
   selectorValue,
+  selectorTargetField,
+  selectorParentLabel,
   sourceOptions,
-  tokens,
   error,
   onPatternChange,
   onSourceChange,
@@ -46,39 +50,26 @@ export function NamingPatternInput({
       </div>
 
       {source === "selector" ? (
-        <input
-          type="text"
-          className="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
-          placeholder="h1.title"
+        <SelectorList
+          label=""
           value={selectorValue}
-          onChange={(e) => onSelectorChange(e.target.value)}
+          targetField={selectorTargetField}
+          parentLabel={selectorParentLabel}
+          onChange={onSelectorChange}
+          error={error}
         />
       ) : (
-        <input
-          type="text"
-          className="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
-          placeholder={label === "폴더명" ? "my_gallery" : "{date}_{index}"}
-          value={pattern}
-          onChange={(e) => onPatternChange(e.target.value)}
-        />
+        <>
+          <input
+            type="text"
+            className="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
+            placeholder="my_gallery"
+            value={pattern}
+            onChange={(e) => onPatternChange(e.target.value)}
+          />
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </>
       )}
-
-      {tokens && source !== "selector" && (
-        <div className="flex gap-1">
-          {tokens.map((token) => (
-            <button
-              key={token.value}
-              type="button"
-              className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80"
-              onClick={() => onPatternChange(pattern + token.value)}
-            >
-              {token.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

@@ -32,13 +32,10 @@ fn make_sequence(name: &str, pattern: &str) -> Sequence {
         selectors: SequenceSelectors {
             media: "img".to_string(),
             folder_name: None,
-            file_name: None,
         },
         naming: SequenceNaming {
             folder: "{title}".to_string(),
             folder_source: "literal".to_string(),
-            file: "{date}_{index}".to_string(),
-            file_source: "pattern".to_string(),
         },
     }
 }

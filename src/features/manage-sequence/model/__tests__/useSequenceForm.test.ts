@@ -7,9 +7,7 @@ describe("useSequenceForm", () => {
     const { result } = renderHook(() => useSequenceForm());
     expect(result.current.urlPattern).toBe("");
     expect(result.current.mediaSelector).toBe("");
-    expect(result.current.filePattern).toBe("{date}_{index}");
     expect(result.current.folderSource).toBe("literal");
-    expect(result.current.fileSource).toBe("pattern");
   });
 
   it("빈 URL 패턴은 유효성 검증에 실패한다", () => {
@@ -72,46 +70,6 @@ describe("useSequenceForm", () => {
     );
   });
 
-  it("파일 패턴에 토큰이 없으면 유효성 검증에 실패한다", () => {
-    const { result } = renderHook(() => useSequenceForm());
-
-    act(() => {
-      result.current.setUrlPattern("https://example.com");
-      result.current.setMediaSelector("img");
-      result.current.setFolderPattern("my_folder");
-      result.current.setFilePattern("plain_text");
-      result.current.setFileSource("pattern");
-    });
-
-    let isValid: boolean;
-    act(() => {
-      isValid = result.current.validate();
-    });
-
-    expect(isValid!).toBe(false);
-    expect(result.current.errors.file_pattern).toContain("토큰");
-  });
-
-  it("파일 소스가 selector이면 토큰 없이도 통과한다", () => {
-    const { result } = renderHook(() => useSequenceForm());
-
-    act(() => {
-      result.current.setName("My Sequence");
-      result.current.setUrlPattern("https://example.com");
-      result.current.setMediaSelector("img");
-      result.current.setFolderPattern("my_folder");
-      result.current.setFilePattern("any_text");
-      result.current.setFileSource("selector");
-    });
-
-    let isValid: boolean;
-    act(() => {
-      isValid = result.current.validate();
-    });
-
-    expect(isValid!).toBe(true);
-  });
-
   it("모든 필드가 올바르면 유효성 검증에 성공한다", () => {
     const { result } = renderHook(() => useSequenceForm());
 
@@ -120,7 +78,6 @@ describe("useSequenceForm", () => {
       result.current.setUrlPattern("https://example.com/{index:start=1,to=10}");
       result.current.setMediaSelector(".gallery img");
       result.current.setFolderPattern("my_gallery");
-      result.current.setFilePattern("{date}_{index}");
     });
 
     let isValid: boolean;
@@ -141,7 +98,6 @@ describe("useSequenceForm", () => {
       result.current.setUrlPattern("https://example.com/{index:start=0,to=5}");
       result.current.setMediaSelector(".img");
       result.current.setFolderPattern("test_folder");
-      result.current.setFilePattern("{date}_{index}");
     });
 
     let json: string;
@@ -155,8 +111,28 @@ describe("useSequenceForm", () => {
     expect(parsed.url_pattern).toBe("https://example.com/{index:start=0,to=5}");
     expect(parsed.selectors.media).toBe(".img");
     expect(parsed.naming.folder).toBe("test_folder");
-    expect(parsed.naming.file).toBe("{date}_{index}");
-    expect(parsed.naming.file_source).toBe("pattern");
+    expect(parsed.naming.folder_source).toBe("literal");
+  });
+
+  it("신규 시퀀스 생성 시 file 관련 필드가 결과에 없다", () => {
+    const { result } = renderHook(() => useSequenceForm());
+
+    act(() => {
+      result.current.setName("No File Fields");
+      result.current.setUrlPattern("https://example.com/page");
+      result.current.setMediaSelector("img");
+      result.current.setFolderPattern("folder");
+    });
+
+    let json: string;
+    act(() => {
+      json = result.current.toJson();
+    });
+
+    const parsed = JSON.parse(json!);
+    expect(parsed.selectors).not.toHaveProperty("file_name");
+    expect(parsed.naming).not.toHaveProperty("file");
+    expect(parsed.naming).not.toHaveProperty("file_source");
   });
 
   it("initial 값이 있으면 해당 값으로 초기화된다", () => {
@@ -174,13 +150,10 @@ describe("useSequenceForm", () => {
       selectors: {
         media: "img.photo",
         folder_name: "h1.title",
-        file_name: null,
       },
       naming: {
         folder: "photos",
         folder_source: "selector" as const,
-        file: "{index}",
-        file_source: "pattern" as const,
       },
     };
 

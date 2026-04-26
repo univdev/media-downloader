@@ -5,7 +5,7 @@ mod downloader;
 mod models;
 mod sequence_index;
 
-use commands::{download, media, sequence};
+use commands::{download, html_fetch, media, sequence, window};
 use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -62,6 +62,11 @@ pub fn run() {
             download::cancel_download,
             media::list_downloads,
             media::open_folder,
+            window::open_sequence_editor,
+            window::open_selector_picker,
+            window::close_window,
+            html_fetch::fetch_html,
+            html_fetch::prettify_html,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

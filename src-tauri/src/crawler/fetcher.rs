@@ -4,7 +4,6 @@ pub struct FetchResult {
     pub page_url: String,
     pub media_urls: Vec<String>,
     pub folder_name: Option<String>,
-    pub file_name_hint: Option<String>,
 }
 
 pub async fn fetch_page(
@@ -12,7 +11,6 @@ pub async fn fetch_page(
     url: &str,
     media_selector: &str,
     folder_selector: Option<&str>,
-    file_selector: Option<&str>,
 ) -> Result<FetchResult, Box<dyn std::error::Error + Send + Sync>> {
     let response = client.get(url).send().await?;
 
@@ -44,17 +42,9 @@ pub async fn fetch_page(
             .map(|el| el.text().collect::<String>().trim().to_string())
     });
 
-    let file_name_hint = file_selector.and_then(|s| {
-        Selector::parse(s)
-            .ok()
-            .and_then(|sel| document.select(&sel).next())
-            .map(|el| el.text().collect::<String>().trim().to_string())
-    });
-
     Ok(FetchResult {
         page_url: url.to_string(),
         media_urls,
         folder_name,
-        file_name_hint,
     })
 }

@@ -5,6 +5,7 @@ use crate::downloader::naming;
 use crate::models::download::DownloadProgressEvent;
 use crate::models::sequence::Sequence;
 use rusqlite::Connection;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,7 +25,6 @@ struct ScannedMedia {
     page_url: String,
     media_type: String,
     folder_name: Option<String>,
-    file_name_hint: Option<String>,
 }
 
 impl DownloadEngine {
@@ -112,7 +112,10 @@ impl DownloadEngine {
         let completed = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let failed = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_DOWNLOADS));
-        let download_date = chrono::Local::now().format("%Y-%m-%d").to_string();
+        // Per-save_dir filename collision tracker. Shared across spawned download tasks
+        // because filename allocation needs a single source of truth, even with
+        // concurrent downloads. Lock is held only briefly during dedupe.
+        let used_names: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 
         let mut handles = Vec::new();
 
@@ -126,11 +129,8 @@ impl DownloadEngine {
             let conn_clone = conn.clone();
             let cancel = self.cancel_token.clone();
             let source_url = media.source_url.clone();
-            let file_name_hint = media.file_name_hint.clone();
             let save_dir_clone = save_dir.clone();
-            let file_pattern = sequence.naming.file.clone();
-            let file_source = sequence.naming.file_source.clone();
-            let download_date_clone = download_date.clone();
+            let used_names_clone = used_names.clone();
             let completed_clone = completed.clone();
             let failed_clone = failed.clone();
 
@@ -141,23 +141,10 @@ impl DownloadEngine {
                     return;
                 }
 
-                let extension = source_url
-                    .rsplit('.')
-                    .next()
-                    .unwrap_or("bin")
-                    .split('?')
-                    .next()
-                    .unwrap_or("bin")
-                    .to_string();
-
-                let file_name = naming::resolve_file_name(
-                    &file_pattern,
-                    index as u32,
-                    &download_date_clone,
-                    file_name_hint.as_deref(),
-                    &file_source,
-                    &extension,
-                );
+                let file_name = {
+                    let mut used = used_names_clone.lock().await;
+                    naming::resolve_file_name(&source_url, &mut used)
+                };
 
                 let file_path = save_dir_clone.join(&file_name);
 
@@ -323,7 +310,6 @@ impl DownloadEngine {
                 url,
                 &sequence.selectors.media,
                 sequence.selectors.folder_name.as_deref(),
-                sequence.selectors.file_name.as_deref(),
             )
             .await;
 
@@ -347,7 +333,6 @@ impl DownloadEngine {
                             page_url: fetch_result.page_url.clone(),
                             media_type: media_type.to_string(),
                             folder_name: fetch_result.folder_name.clone(),
-                            file_name_hint: fetch_result.file_name_hint.clone(),
                         });
                     }
                 }
@@ -427,7 +412,6 @@ impl DownloadEngine {
                     media_url,
                     &sequence.selectors.media,
                     sequence.selectors.folder_name.as_deref(),
-                    sequence.selectors.file_name.as_deref(),
                 )
                 .await;
 
@@ -451,7 +435,6 @@ impl DownloadEngine {
                                 page_url: fetch_result.page_url.clone(),
                                 media_type: media_type.to_string(),
                                 folder_name: fetch_result.folder_name.clone(),
-                                file_name_hint: fetch_result.file_name_hint.clone(),
                             });
                         }
                     }

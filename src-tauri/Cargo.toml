@@ -25,6 +25,8 @@ tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", features = ["stream"] }
+rquest = "5"
+rquest-util = "2"
 scraper = "0.22"
 tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -33,4 +35,5 @@ url = "2"
 regex = "1"
 open = "5"
 tokio-util = "0.7"
+urlencoding = "2"
 

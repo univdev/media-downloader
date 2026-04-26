@@ -9,14 +9,11 @@ export interface SequenceMeta {
 export interface SequenceSelectors {
   media: string;
   folder_name: string | null;
-  file_name: string | null;
 }
 
 export interface SequenceNaming {
   folder: string;
   folder_source: "literal" | "selector";
-  file: string;
-  file_source: "pattern" | "selector";
 }
 
 export interface Sequence {

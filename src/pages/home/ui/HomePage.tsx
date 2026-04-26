@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { MediaToolbar, useMediaToolbarViewModel } from "@/widgets/media-toolbar";
 import { DownloadProgress, useDownloadProgressViewModel } from "@/widgets/download-progress";
 import { MediaList, MediaItem, useMediaListViewModel, useMediaItemViewModel } from "@/widgets/media-list";
@@ -8,27 +8,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/dialog";
-import { SequenceDialogContent } from "@/features/manage-sequence/ui/SequenceDialog";
-import { useSequenceDialogViewModel } from "@/features/manage-sequence/ui/SequenceDialog.viewmodel";
 import { SequenceListDialogContent } from "@/features/manage-sequence/ui/SequenceListDialog";
 import { useSequenceListDialogViewModel } from "@/features/manage-sequence/ui/SequenceListDialog.viewmodel";
-import { getSequence } from "@/entities/sequence";
+import { openSequenceEditor } from "@/features/manage-sequence";
+import { useSequenceStore } from "@/entities/sequence";
+import { useTauriEvent } from "@/shared/hooks/useTauriEvent";
 import type { Download } from "@/entities/download";
-import type { Sequence } from "@/entities/sequence";
 
 function MediaItemConnected({ download }: { download: Download }) {
   const vm = useMediaItemViewModel(download);
   return <MediaItem {...vm} onClick={vm.handleClick} />;
 }
 
-type DialogMode = "closed" | "list" | "create" | "edit";
+type DialogMode = "closed" | "list";
 
 export function HomePage() {
   const progress = useDownloadProgressViewModel();
   const list = useMediaListViewModel();
+  const { fetch: refreshSequences } = useSequenceStore();
 
   const [dialogMode, setDialogMode] = useState<DialogMode>("closed");
-  const [editSequence, setEditSequence] = useState<Sequence | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOpenSettings = useCallback(() => {
@@ -36,65 +35,26 @@ export function HomePage() {
   }, []);
 
   const handleCreate = useCallback(() => {
-    setEditSequence(undefined);
-    setDialogMode("create");
+    void openSequenceEditor();
+  }, []);
+
+  const handleEdit = useCallback((name: string) => {
+    void openSequenceEditor({ sequenceName: name });
   }, []);
 
   const handleRequestCreateFromUrl = useCallback((urlSeed: string) => {
-    const now = new Date().toISOString();
-    setEditSequence({
-      version: "1.0",
-      meta: {
-        name: "",
-        description: "",
-        author: "",
-        created_at: now,
-        updated_at: now,
-      },
-      url_pattern: urlSeed,
-      media_url_pattern: null,
-      selectors: {
-        media: "",
-        folder_name: null,
-        file_name: null,
-      },
-      naming: {
-        folder: "",
-        folder_source: "literal",
-        file: "{date}_{index}",
-        file_source: "pattern",
-      },
-    });
-    setDialogMode("create");
+    void openSequenceEditor({ urlSeed });
   }, []);
 
   const toolbar = useMediaToolbarViewModel({
     onRequestCreateSequence: handleRequestCreateFromUrl,
   });
 
-  const handleEdit = useCallback(async (name: string) => {
-    try {
-      const json = await getSequence(name);
-      const seq = JSON.parse(json) as Sequence;
-      setEditSequence(seq);
-      setDialogMode("edit");
-    } catch (e) {
-      console.error("Failed to load sequence:", e);
-    }
-  }, []);
-
   const handleCloseDialog = useCallback(() => {
     setDialogMode("closed");
-    setEditSequence(undefined);
-  }, []);
-
-  const handleBackToList = useCallback(() => {
-    setDialogMode("list");
-    setEditSequence(undefined);
   }, []);
 
   const sequenceList = useSequenceListDialogViewModel();
-  const sequenceForm = useSequenceDialogViewModel(editSequence, handleBackToList);
 
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -111,6 +71,11 @@ export function HomePage() {
     },
     [sequenceList]
   );
+
+  // W1 (sequence editor) -> main: 시퀀스 저장 시 store refresh.
+  useTauriEvent<{ name?: string }>("sequence-saved", () => {
+    void refreshSequences();
+  });
 
   const isDialogOpen = dialogMode !== "closed";
 
@@ -148,41 +113,25 @@ export function HomePage() {
       <Dialog open={isDialogOpen} onOpenChange={(open) => !open && handleCloseDialog()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {dialogMode === "list" && "시퀀스 관리"}
-              {dialogMode === "create" && "새 시퀀스"}
-              {dialogMode === "edit" && "시퀀스 편집"}
-            </DialogTitle>
+            <DialogTitle>시퀀스 관리</DialogTitle>
           </DialogHeader>
 
-          {dialogMode === "list" && (
-            <>
-              <SequenceListDialogContent
-                sequences={sequenceList.sequences}
-                isProcessing={sequenceList.isProcessing}
-                onEdit={handleEdit}
-                onDelete={sequenceList.deleteSequence}
-                onExport={sequenceList.exportSequence}
-                onImport={handleImportClick}
-                onCreate={handleCreate}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                className="hidden"
-                onChange={handleFileImport}
-              />
-            </>
-          )}
-
-          {(dialogMode === "create" || dialogMode === "edit") && (
-            <SequenceDialogContent
-              form={sequenceForm.form}
-              onSubmit={sequenceForm.handleSubmit}
-              onCancel={handleBackToList}
-            />
-          )}
+          <SequenceListDialogContent
+            sequences={sequenceList.sequences}
+            isProcessing={sequenceList.isProcessing}
+            onEdit={handleEdit}
+            onDelete={sequenceList.deleteSequence}
+            onExport={sequenceList.exportSequence}
+            onImport={handleImportClick}
+            onCreate={handleCreate}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleFileImport}
+          />
         </DialogContent>
       </Dialog>
     </div>

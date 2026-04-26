@@ -1,5 +1,5 @@
-import { UrlPatternInput } from "./UrlPatternInput";
-import { SelectorInput } from "./SelectorInput";
+import { UrlPatternEditor } from "./UrlPatternEditor";
+import { SelectorList } from "./SelectorList";
 import { NamingPatternInput } from "./NamingPatternInput";
 import { PatternPreview } from "./PatternPreview";
 import { Button } from "@/shared/ui/button";
@@ -43,7 +43,7 @@ export function SequenceDialogContent({
         />
       </div>
 
-      <UrlPatternInput
+      <UrlPatternEditor
         value={form.urlPattern}
         error={form.errors.url_pattern}
         onChange={form.setUrlPattern}
@@ -78,8 +78,11 @@ export function SequenceDialogContent({
         <PatternPreview urlPattern={form.mediaUrlPattern} />
       )}
 
-      <SelectorInput
+      <SelectorList
+        label="다운받을 미디어 요소"
         value={form.mediaSelector}
+        targetField="media"
+        parentLabel="sequence-editor"
         error={form.errors.media_selector}
         onChange={form.setMediaSelector}
       />
@@ -89,6 +92,8 @@ export function SequenceDialogContent({
         pattern={form.folderPattern}
         source={form.folderSource}
         selectorValue={form.folderNameSelector ?? ""}
+        selectorTargetField="folder_name"
+        selectorParentLabel="sequence-editor"
         sourceOptions={[
           { value: "literal", label: "직접 입력" },
           { value: "selector", label: "셀렉터" },
@@ -97,26 +102,6 @@ export function SequenceDialogContent({
         onPatternChange={form.setFolderPattern}
         onSourceChange={(v) => form.setFolderSource(v as "literal" | "selector")}
         onSelectorChange={form.setFolderNameSelector}
-      />
-
-      <NamingPatternInput
-        label="파일명"
-        pattern={form.filePattern}
-        source={form.fileSource}
-        selectorValue={form.fileNameSelector ?? ""}
-        sourceOptions={[
-          { value: "pattern", label: "패턴" },
-          { value: "selector", label: "셀렉터" },
-        ]}
-        tokens={[
-          { value: "{date}", label: "date" },
-          { value: "{datetime}", label: "datetime" },
-          { value: "{index}", label: "index" },
-        ]}
-        error={form.errors.file_pattern}
-        onPatternChange={form.setFilePattern}
-        onSourceChange={(v) => form.setFileSource(v as "pattern" | "selector")}
-        onSelectorChange={form.setFileNameSelector}
       />
 
       <div className="flex justify-end gap-2 pt-2">
