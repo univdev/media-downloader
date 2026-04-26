@@ -2,10 +2,21 @@ import { useState, useCallback } from "react";
 import type { Sequence } from "@/entities/sequence";
 
 export interface SequenceFormErrors {
+  name?: string;
   url_pattern?: string;
   media_selector?: string;
   folder_pattern?: string;
   file_pattern?: string;
+}
+
+const INVALID_NAME_CHARS = /[\\/:*?"<>|]/;
+
+function validateName(name: string): string | undefined {
+  if (!name.trim()) return "시퀀스 이름을 입력해주세요";
+  if (INVALID_NAME_CHARS.test(name)) {
+    return "이름에 다음 문자는 사용할 수 없습니다: \\ / : * ? \" < > |";
+  }
+  return undefined;
 }
 
 const FILE_PATTERN_TOKENS = ["{index}", "{date}", "{datetime}"];
@@ -41,6 +52,7 @@ function validateFilePattern(pattern: string, source: string): string | undefine
 
 export function useSequenceForm(initial?: Sequence) {
   const [urlPattern, setUrlPattern] = useState(initial?.url_pattern ?? "");
+  const [mediaUrlPattern, setMediaUrlPattern] = useState(initial?.media_url_pattern ?? "");
   const [mediaSelector, setMediaSelector] = useState(initial?.selectors.media ?? "");
   const [folderNameSelector, setFolderNameSelector] = useState(initial?.selectors.folder_name ?? "");
   const [fileNameSelector, setFileNameSelector] = useState(initial?.selectors.file_name ?? "");
@@ -58,6 +70,7 @@ export function useSequenceForm(initial?: Sequence) {
 
   const validate = useCallback((): boolean => {
     const newErrors: SequenceFormErrors = {
+      name: validateName(name),
       url_pattern: validateUrlPattern(urlPattern),
       media_selector: validateMediaSelector(mediaSelector),
       folder_pattern: validateFolderPattern(folderPattern),
@@ -66,7 +79,7 @@ export function useSequenceForm(initial?: Sequence) {
 
     setErrors(newErrors);
     return !Object.values(newErrors).some(Boolean);
-  }, [urlPattern, mediaSelector, folderPattern, filePattern, fileSource]);
+  }, [name, urlPattern, mediaSelector, folderPattern, filePattern, fileSource]);
 
   const toJson = useCallback((): string => {
     const now = new Date().toISOString();
@@ -80,6 +93,7 @@ export function useSequenceForm(initial?: Sequence) {
         updated_at: now,
       },
       url_pattern: urlPattern,
+      media_url_pattern: mediaUrlPattern.trim() || null,
       selectors: {
         media: mediaSelector,
         folder_name: folderSource === "selector" ? folderNameSelector : null,
@@ -94,15 +108,21 @@ export function useSequenceForm(initial?: Sequence) {
     };
     return JSON.stringify(sequence, null, 2);
   }, [
-    name, description, urlPattern, mediaSelector,
+    name, description, urlPattern, mediaUrlPattern, mediaSelector,
     folderNameSelector, fileNameSelector,
     folderPattern, folderSource, filePattern, fileSource, initial,
   ]);
+
+  const copyEntryToMedia = useCallback(() => {
+    setMediaUrlPattern(urlPattern);
+  }, [urlPattern]);
 
   return {
     name, setName,
     description, setDescription,
     urlPattern, setUrlPattern,
+    mediaUrlPattern, setMediaUrlPattern,
+    copyEntryToMedia,
     mediaSelector, setMediaSelector,
     folderNameSelector, setFolderNameSelector,
     fileNameSelector, setFileNameSelector,

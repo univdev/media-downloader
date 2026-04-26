@@ -27,6 +27,9 @@ export function SequenceDialogContent({
           value={form.name}
           onChange={(e) => form.setName(e.target.value)}
         />
+        {form.errors.name && (
+          <p className="text-xs text-destructive">{form.errors.name}</p>
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -47,6 +50,33 @@ export function SequenceDialogContent({
       />
 
       <PatternPreview urlPattern={form.urlPattern} />
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium">미디어 URL 패턴</label>
+          <button
+            type="button"
+            className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80"
+            onClick={form.copyEntryToMedia}
+          >
+            엔트리 URL과 동일
+          </button>
+        </div>
+        <input
+          type="text"
+          className="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
+          placeholder="비워두면 엔트리 URL에서 직접 미디어 추출"
+          value={form.mediaUrlPattern}
+          onChange={(e) => form.setMediaUrlPattern(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          엔트리 URL과 다운로드 URL이 다를 경우 설정. {"{id}"}, {"{page}"} 등 캡처 변수 사용 가능.
+        </p>
+      </div>
+
+      {form.mediaUrlPattern && (
+        <PatternPreview urlPattern={form.mediaUrlPattern} />
+      )}
 
       <SelectorInput
         value={form.mediaSelector}

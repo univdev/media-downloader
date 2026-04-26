@@ -29,6 +29,7 @@ pub struct Sequence {
     pub version: String,
     pub meta: SequenceMeta,
     pub url_pattern: String,
+    pub media_url_pattern: Option<String>,
     pub selectors: SequenceSelectors,
     pub naming: SequenceNaming,
 }

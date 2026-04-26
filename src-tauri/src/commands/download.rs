@@ -3,7 +3,8 @@ use crate::downloader::engine::DownloadEngine;
 use crate::models::sequence::Sequence;
 use crate::AppState;
 use std::collections::HashMap;
-use tauri::State;
+use std::path::PathBuf;
+use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
 struct DownloadManager {
@@ -21,24 +22,46 @@ impl DownloadManager {
 static DOWNLOAD_MANAGER: std::sync::LazyLock<Mutex<DownloadManager>> =
     std::sync::LazyLock::new(|| Mutex::new(DownloadManager::new()));
 
+fn sequences_dir(app: &tauri::AppHandle) -> PathBuf {
+    let base = app
+        .path()
+        .resource_dir()
+        .unwrap_or_else(|_| std::env::current_exe().unwrap().parent().unwrap().to_path_buf());
+    base.join("sequences")
+}
+
 #[tauri::command]
-pub async fn start_download(
+pub async fn start_download_by_url(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-    sequence_json: String,
+    url: String,
 ) -> Result<i64, String> {
-    let sequence: Sequence =
-        serde_json::from_str(&sequence_json).map_err(|e| e.to_string())?;
+    // 1. 매칭
+    let match_result = {
+        let index = state.sequence_index.read().await;
+        index
+            .find_best(&url)
+            .ok_or_else(|| "No matching sequence".to_string())?
+    };
 
+    // 2. 시퀀스 JSON 로드
+    let dir = sequences_dir(&app);
+    let file_name = format!(
+        "{}.json",
+        match_result.sequence_name.replace(' ', "-").to_lowercase()
+    );
+    let json = std::fs::read_to_string(dir.join(&file_name)).map_err(|e| e.to_string())?;
+    let mut sequence: Sequence = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+
+    // 3. url_pattern을 입력 URL로 오버라이드
+    sequence.url_pattern = url.clone();
+    let sequence_json = serde_json::to_string(&sequence).map_err(|e| e.to_string())?;
+
+    // 4. DB insert + engine spawn (기존 start_download 본문 그대로)
     let download_id = {
         let conn = state.db.lock().await;
-        download_repo::insert_download(
-            &conn,
-            &sequence.meta.name,
-            &sequence_json,
-            "",
-        )
-        .map_err(|e| e.to_string())?
+        download_repo::insert_download(&conn, &sequence.meta.name, &sequence_json, "")
+            .map_err(|e| e.to_string())?
     };
 
     let engine = DownloadEngine::new();

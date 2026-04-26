@@ -1,56 +1,45 @@
-import { useEffect } from "react";
-import type { SequenceMeta } from "@/entities/sequence";
 import { Button } from "@/shared/ui/button";
+import { MatchPreview } from "@/features/match-sequence";
 
 interface MediaToolbarProps {
-  sequences: SequenceMeta[];
-  selectedName: string | null;
-  urlPattern: string;
+  url: string;
+  matchedName: string | null;
+  tiedCandidates: string[];
+  isMatching: boolean;
   isStarting: boolean;
-  onUrlPatternChange: (value: string) => void;
-  onSelectSequence: (name: string | null) => void;
+  canStart: boolean;
+  onUrlChange: (value: string) => void;
   onStartDownload: () => void;
   onOpenSettings: () => void;
-  onFetchSequences: () => void;
 }
 
 export function MediaToolbar({
-  sequences,
-  selectedName,
-  urlPattern,
+  url,
+  matchedName,
+  tiedCandidates,
+  isMatching,
   isStarting,
-  onUrlPatternChange,
-  onSelectSequence,
+  canStart,
+  onUrlChange,
   onStartDownload,
   onOpenSettings,
-  onFetchSequences,
 }: MediaToolbarProps) {
-  useEffect(() => {
-    onFetchSequences();
-  }, [onFetchSequences]);
-
   return (
     <div className="flex items-center gap-2 border-b p-3">
-      <select
-        className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-        value={selectedName ?? ""}
-        onChange={(e) => onSelectSequence(e.target.value || null)}
-      >
-        <option value="">시퀀스 선택...</option>
-        {sequences.map((seq) => (
-          <option key={seq.name} value={seq.name}>
-            {seq.name}
-          </option>
-        ))}
-      </select>
-
-      <input
-        type="text"
-        className="h-8 flex-1 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
-        placeholder="URL 패턴을 입력하세요..."
-        value={urlPattern}
-        onChange={(e) => onUrlPatternChange(e.target.value)}
-      />
+      <div className="flex flex-1 flex-col gap-1">
+        <input
+          type="text"
+          className="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
+          placeholder="URL을 입력하세요..."
+          value={url}
+          onChange={(e) => onUrlChange(e.target.value)}
+        />
+        <MatchPreview
+          matchedName={matchedName}
+          tiedCandidates={tiedCandidates}
+          isMatching={isMatching}
+        />
+      </div>
 
       <Button
         variant="ghost"
@@ -76,7 +65,7 @@ export function MediaToolbar({
 
       <Button
         size="sm"
-        disabled={isStarting || !urlPattern.trim()}
+        disabled={!canStart || isStarting}
         onClick={onStartDownload}
         aria-label="다운로드 시작"
       >

@@ -3,17 +3,19 @@ mod crawler;
 mod db;
 mod downloader;
 mod models;
+mod sequence_index;
 
 use commands::{download, media, sequence};
 use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Manager;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 pub struct AppState {
     pub db: Arc<Mutex<Connection>>,
     pub base_dir: PathBuf,
+    pub sequence_index: Arc<RwLock<crate::sequence_index::SequenceIndex>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,9 +40,13 @@ pub fn run() {
             let conn = Connection::open(&db_path).expect("Failed to open database");
             db::schema::initialize(&conn).expect("Failed to initialize database schema");
 
+            let sequences_dir = base_dir.join("sequences");
+            let index = sequence_index::SequenceIndex::build(&sequences_dir);
+
             app.manage(AppState {
                 db: Arc::new(Mutex::new(conn)),
                 base_dir,
+                sequence_index: Arc::new(RwLock::new(index)),
             });
 
             Ok(())
@@ -51,7 +57,8 @@ pub fn run() {
             sequence::get_sequence,
             sequence::delete_sequence,
             sequence::validate_sequence,
-            download::start_download,
+            sequence::find_sequence_by_url,
+            download::start_download_by_url,
             download::cancel_download,
             media::list_downloads,
             media::open_folder,

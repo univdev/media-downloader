@@ -1,15 +1,15 @@
 import { useState, useCallback } from "react";
-import { startDownload } from "../api/startDownload";
+import { startDownloadByUrl } from "../api/startDownloadByUrl";
 
 export function useStartDownload() {
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const start = useCallback(async (sequenceJson: string) => {
+  const start = useCallback(async (url: string) => {
     setIsStarting(true);
     setError(null);
     try {
-      const downloadId = await startDownload(sequenceJson);
+      const downloadId = await startDownloadByUrl(url);
       return downloadId;
     } catch (e) {
       setError(String(e));

@@ -14,21 +14,21 @@ describe("useStartDownload", () => {
     vi.clearAllMocks();
   });
 
-  it("다운로드 시작 성공 시 downloadId를 반환한다", async () => {
+  it("URL로 다운로드 시작 성공 시 downloadId를 반환한다", async () => {
     mockInvoke.mockResolvedValueOnce(42);
 
     const { result } = renderHook(() => useStartDownload());
 
     let downloadId: number | null;
     await act(async () => {
-      downloadId = await result.current.start('{"version":"1.0"}');
+      downloadId = await result.current.start("https://example.com/posts/123");
     });
 
     expect(downloadId!).toBe(42);
     expect(result.current.isStarting).toBe(false);
     expect(result.current.error).toBeNull();
-    expect(mockInvoke).toHaveBeenCalledWith("start_download", {
-      sequence_json: '{"version":"1.0"}',
+    expect(mockInvoke).toHaveBeenCalledWith("start_download_by_url", {
+      url: "https://example.com/posts/123",
     });
   });
 
@@ -39,7 +39,7 @@ describe("useStartDownload", () => {
 
     let downloadId: number | null;
     await act(async () => {
-      downloadId = await result.current.start("{}");
+      downloadId = await result.current.start("https://example.com/x");
     });
 
     expect(downloadId!).toBeNull();

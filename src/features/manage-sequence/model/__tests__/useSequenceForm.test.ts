@@ -24,6 +24,34 @@ describe("useSequenceForm", () => {
     expect(result.current.errors.url_pattern).toBe("URL 패턴을 입력해주세요");
   });
 
+  it("빈 이름은 유효성 검증에 실패한다", () => {
+    const { result } = renderHook(() => useSequenceForm());
+
+    let isValid: boolean;
+    act(() => {
+      isValid = result.current.validate();
+    });
+
+    expect(isValid!).toBe(false);
+    expect(result.current.errors.name).toBe("시퀀스 이름을 입력해주세요");
+  });
+
+  it("이름에 잘못된 문자가 있으면 유효성 검증에 실패한다", () => {
+    const { result } = renderHook(() => useSequenceForm());
+
+    act(() => {
+      result.current.setName("invalid/name");
+    });
+
+    let isValid: boolean;
+    act(() => {
+      isValid = result.current.validate();
+    });
+
+    expect(isValid!).toBe(false);
+    expect(result.current.errors.name).toContain("사용할 수 없습니다");
+  });
+
   it("http로 시작하지 않는 URL은 유효성 검증에 실패한다", () => {
     const { result } = renderHook(() => useSequenceForm());
 
@@ -68,6 +96,7 @@ describe("useSequenceForm", () => {
     const { result } = renderHook(() => useSequenceForm());
 
     act(() => {
+      result.current.setName("My Sequence");
       result.current.setUrlPattern("https://example.com");
       result.current.setMediaSelector("img");
       result.current.setFolderPattern("my_folder");
@@ -87,6 +116,7 @@ describe("useSequenceForm", () => {
     const { result } = renderHook(() => useSequenceForm());
 
     act(() => {
+      result.current.setName("My Sequence");
       result.current.setUrlPattern("https://example.com/{index:start=1,to=10}");
       result.current.setMediaSelector(".gallery img");
       result.current.setFolderPattern("my_gallery");
@@ -140,6 +170,7 @@ describe("useSequenceForm", () => {
         updated_at: "2026-01-01T00:00:00Z",
       },
       url_pattern: "https://test.com/{index:start=1,to=5}",
+      media_url_pattern: null,
       selectors: {
         media: "img.photo",
         folder_name: "h1.title",

@@ -24,7 +24,6 @@ function MediaItemConnected({ download }: { download: Download }) {
 type DialogMode = "closed" | "list" | "create" | "edit";
 
 export function HomePage() {
-  const toolbar = useMediaToolbarViewModel();
   const progress = useDownloadProgressViewModel();
   const list = useMediaListViewModel();
 
@@ -40,6 +39,38 @@ export function HomePage() {
     setEditSequence(undefined);
     setDialogMode("create");
   }, []);
+
+  const handleRequestCreateFromUrl = useCallback((urlSeed: string) => {
+    const now = new Date().toISOString();
+    setEditSequence({
+      version: "1.0",
+      meta: {
+        name: "",
+        description: "",
+        author: "",
+        created_at: now,
+        updated_at: now,
+      },
+      url_pattern: urlSeed,
+      media_url_pattern: null,
+      selectors: {
+        media: "",
+        folder_name: null,
+        file_name: null,
+      },
+      naming: {
+        folder: "",
+        folder_source: "literal",
+        file: "{date}_{index}",
+        file_source: "pattern",
+      },
+    });
+    setDialogMode("create");
+  }, []);
+
+  const toolbar = useMediaToolbarViewModel({
+    onRequestCreateSequence: handleRequestCreateFromUrl,
+  });
 
   const handleEdit = useCallback(async (name: string) => {
     try {
@@ -86,15 +117,15 @@ export function HomePage() {
   return (
     <div className="flex h-screen flex-col">
       <MediaToolbar
-        sequences={toolbar.sequences}
-        selectedName={toolbar.selectedName}
-        urlPattern={toolbar.urlPattern}
+        url={toolbar.url}
+        matchedName={toolbar.matchedName}
+        tiedCandidates={toolbar.tiedCandidates}
+        isMatching={toolbar.isMatching}
         isStarting={toolbar.isStarting}
-        onUrlPatternChange={toolbar.setUrlPattern}
-        onSelectSequence={toolbar.selectSequence}
+        canStart={toolbar.canStart}
+        onUrlChange={toolbar.setUrl}
         onStartDownload={toolbar.startDownload}
         onOpenSettings={handleOpenSettings}
-        onFetchSequences={toolbar.fetchSequences}
       />
 
       {progress.activeProgress && (

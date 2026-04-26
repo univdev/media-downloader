@@ -270,6 +270,24 @@ impl DownloadEngine {
         download_id: i64,
         sequence: &Sequence,
     ) -> Result<Vec<ScannedMedia>, Box<dyn std::error::Error + Send + Sync>> {
+        // If media_url_pattern is set, use entry→media URL transformation flow
+        if let Some(ref media_pattern) = sequence.media_url_pattern {
+            return self
+                .scan_with_media_url(app, download_id, sequence, media_pattern)
+                .await;
+        }
+
+        // Default flow: scan entry URLs directly for media via CSS selectors
+        self.scan_direct(app, download_id, sequence).await
+    }
+
+    /// Default scan: visit each URL and extract media via CSS selectors
+    async fn scan_direct(
+        &self,
+        app: &AppHandle,
+        download_id: i64,
+        sequence: &Sequence,
+    ) -> Result<Vec<ScannedMedia>, Box<dyn std::error::Error + Send + Sync>> {
         let parsed = parse_url_pattern(&sequence.url_pattern)?;
         let has_open_index = parsed.segments.iter().any(|s| {
             matches!(s, UrlSegment::IndexRange { to: None, .. })
@@ -337,6 +355,111 @@ impl DownloadEngine {
                     break;
                 }
                 Err(e) => return Err(e),
+            }
+        }
+
+        Ok(all_media)
+    }
+
+    /// Transformation scan: match entry URL to capture variables,
+    /// apply them to media_url_pattern, then scan the resulting media URLs
+    async fn scan_with_media_url(
+        &self,
+        app: &AppHandle,
+        download_id: i64,
+        sequence: &Sequence,
+        media_pattern_str: &str,
+    ) -> Result<Vec<ScannedMedia>, Box<dyn std::error::Error + Send + Sync>> {
+        use crate::crawler::pattern::{apply_captures, match_and_capture};
+
+        let entry_parsed = parse_url_pattern(&sequence.url_pattern)?;
+
+        // The entry URL pattern is used for matching (not generation).
+        // The actual concrete URL comes from url_pattern used as-is if it has no
+        // generation tokens, or from generate_urls() if it does.
+        let entry_urls = entry_parsed.generate_urls();
+
+        // For each entry URL, capture variables and build media URLs
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?;
+
+        let mut all_media = Vec::new();
+
+        for (i, entry_url) in entry_urls.iter().enumerate() {
+            if self.cancel_token.is_cancelled() {
+                break;
+            }
+
+            // Try to capture variables from the entry URL using the entry pattern
+            let captures = match match_and_capture(&entry_parsed, entry_url) {
+                Ok(c) => c,
+                Err(_) => std::collections::HashMap::new(),
+            };
+
+            // Apply captures to media URL pattern and generate media URLs
+            let media_parsed = apply_captures(media_pattern_str, &captures)?;
+            let media_has_open_index = media_parsed.segments.iter().any(|s| {
+                matches!(s, UrlSegment::IndexRange { to: None, .. })
+            });
+            let media_urls = media_parsed.generate_urls();
+
+            for (j, media_url) in media_urls.iter().enumerate() {
+                if self.cancel_token.is_cancelled() {
+                    break;
+                }
+
+                let _ = app.emit(
+                    "download-progress",
+                    DownloadProgressEvent {
+                        download_id,
+                        phase: "scanning".to_string(),
+                        current: (i * media_urls.len() + j + 1) as u32,
+                        total: (entry_urls.len() * media_urls.len()) as u32,
+                        current_file: Some(media_url.clone()),
+                        status: "in_progress".to_string(),
+                        failed_count: 0,
+                    },
+                );
+
+                let result = fetch_page(
+                    &client,
+                    media_url,
+                    &sequence.selectors.media,
+                    sequence.selectors.folder_name.as_deref(),
+                    sequence.selectors.file_name.as_deref(),
+                )
+                .await;
+
+                match result {
+                    Ok(fetch_result) => {
+                        if fetch_result.media_urls.is_empty() && media_has_open_index {
+                            break;
+                        }
+                        for url in fetch_result.media_urls {
+                            let media_type = if url.contains(".mp4")
+                                || url.contains(".webm")
+                                || url.contains(".mov")
+                            {
+                                "video"
+                            } else {
+                                "image"
+                            };
+
+                            all_media.push(ScannedMedia {
+                                source_url: url,
+                                page_url: fetch_result.page_url.clone(),
+                                media_type: media_type.to_string(),
+                                folder_name: fetch_result.folder_name.clone(),
+                                file_name_hint: fetch_result.file_name_hint.clone(),
+                            });
+                        }
+                    }
+                    Err(_) if media_has_open_index => {
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                }
             }
         }
 

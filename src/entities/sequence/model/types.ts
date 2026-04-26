@@ -23,6 +23,7 @@ export interface Sequence {
   version: string;
   meta: SequenceMeta;
   url_pattern: string;
+  media_url_pattern: string | null;
   selectors: SequenceSelectors;
   naming: SequenceNaming;
 }
