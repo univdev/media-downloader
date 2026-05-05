@@ -145,7 +145,7 @@ fn perf_find_best_10k_under_5ms_p99() {
 }
 ```
 
-`cargo test --release -- perf_find_best_10k_under_5ms_p99` 로 실행.
+`cargo test --release -- perf_find_best_10k_under_5ms_p99` 로 실행. **`--release`는 perf 벤치 한정**. 일반 단위 테스트는 debug(`cargo test --lib`) 디폴트 — release는 boring-sys 등 의존성 풀 컴파일을 트리거해 시간이 폭증한다.
 
 ### 3-3. 합성 데이터 생성
 
@@ -282,21 +282,25 @@ test("매칭 실패 시 toast → 시퀀스 만들기 클릭 → 다이얼로그
 - `start_download` → `start_download_by_url` 교체 후, 기존 `start_download` 테스트는 **삭제 또는 갱신**. 호환 유지 안 함.
 - `MediaToolbar` selectbox 관련 e2e는 모두 갱신.
 
-## 7. 실행 명령어
+## 7. 실행 명령어 (참고용 — 본 에이전트는 직접 실행하지 않음)
+
+테스트 작성 단계에서는 아래 명령을 호출하지 않는다. 모든 실행은 오케스트레이터가 모든 작업 완료 후 `integration-qa` 에이전트 1회 호출로 위임한다.
 
 ```bash
-# Rust
+# (integration-qa 전용) 최종 단일 게이트 — debug 디폴트
+cd src-tauri && cargo check
 cd src-tauri && cargo test --lib
-cd src-tauri && cargo test --release perf_  # 성능 테스트
-cd src-tauri && cargo bench  # criterion (도입 시)
+pnpm tsc --noEmit
+pnpm test
 
-# 프론트
-pnpm test          # vitest
-pnpm test:e2e      # Playwright
+# (선택) perf 벤치 — 사용자가 성능 검증을 명시 요청한 경우만, release 필요
+cd src-tauri && cargo test --release perf_
 
-# 전체
-cd src-tauri && cargo check && cd .. && pnpm tsc --noEmit && pnpm test
+# (선택) Playwright e2e — 사용자가 e2e 명시 요청 + 환경 준비된 경우만
+pnpm test:e2e
 ```
+
+**핵심**: e2e와 perf는 opt-in. 매번 시도해서 환경 부재로 실패 보고하지 않는다.
 
 ## 8. 보고 형식
 

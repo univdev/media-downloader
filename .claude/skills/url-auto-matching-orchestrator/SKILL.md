@@ -57,8 +57,8 @@ description: docs/url-auto-matching.md 계획에 따라 URL 자동 매칭 기능
 - 신규 모듈 생성: `src-tauri/src/sequence_index/{mod.rs, regex_compile.rs, specificity.rs}`
 - `lib.rs`에 `mod sequence_index;` 추가, `AppState.sequence_index: Arc<RwLock<SequenceIndex>>` 필드 추가
 - setup에서 `SequenceIndex::build(sequences_dir)` 호출
-- `cargo check` 통과 확인
 - 산출물: `_workspace/10_backend_skeleton.md` (생성된 파일 목록 + struct 시그니처)
+- **빌드 검증 X** — cargo check / cargo test는 호출하지 않는다. 모든 검증은 Phase 6 단일 QA 게이트에서.
 
 ### 작업 B — frontend-engineer (병렬)
 - `pnpm add react-toastify` 설치
@@ -75,8 +75,8 @@ description: docs/url-auto-matching.md 계획에 따라 URL 자동 매칭 기능
 - `commands/download.rs`의 `start_download` → `start_download_by_url` 교체 (이전 함수 제거)
 - `commands/sequence.rs`의 `create_sequence`/`delete_sequence`에 `state: State<'_, AppState>` 인자 추가 + `state.sequence_index.write().await.upsert/remove(...)` 호출
 - `lib.rs` `invoke_handler` 갱신: 기존 `start_download` 제거, `start_download_by_url` + `find_sequence_by_url` 추가
-- `cargo check` 통과 확인
 - 산출물: `_workspace/20_backend_commands.md` (command 시그니처 표 — TS 측이 사용)
+- **빌드 검증 X** — Phase 6 단일 QA 게이트에서 일괄 실행.
 
 ### 작업 D — frontend-engineer (작업 C 완료 후 시작)
 - `src/features/match-sequence/api/findSequenceByUrl.ts` 작성
@@ -87,19 +87,12 @@ description: docs/url-auto-matching.md 계획에 따라 URL 자동 매칭 기능
 - `src/features/match-sequence/index.ts` re-export
 - `src/features/start-download/api/` 의 기존 `startDownload.ts`를 `startDownloadByUrl.ts`로 교체
 - `src/features/start-download/model/useStartDownload.ts` 시그니처 변경
-- `pnpm tsc --noEmit` 통과 확인
 - 산출물: `_workspace/21_frontend_api.md` (생성 파일 + 호출하는 invoke 목록)
+- **빌드 검증 X** — Phase 6 단일 QA 게이트에서 일괄 실행.
 
-## Phase 4: 정합성 검증 (게이트)
+## Phase 4: (제거됨)
 
-### 작업 E — integration-qa
-- 작업 C 산출물(command 시그니처 표) + 작업 D 산출물(invoke 호출 목록) 동시 비교
-- `tauri-boundary-qa` 스킬의 매트릭스 작성
-- `MatchResult` 필드 1:1 비교 (Rust struct ↔ TS interface)
-- `lib.rs` `invoke_handler` 등록 누락 확인
-- 산출물: `_workspace/30_qa_matrix.md`
-
-**게이트**: 결함 발견 시 책임 에이전트에 즉시 SendMessage. 1회 재요청 후에도 결함 잔존 시 오케스트레이터에 에스컬레이션 + 사용자 보고.
+기존 Phase 4 (중간 정합성 매트릭스 게이트)는 비효율로 제거되었다. 모든 정합성 검증과 빌드/테스트 실행은 모든 작업이 끝난 뒤 Phase 6의 **단일 최종 QA 게이트**에서 통합 실행한다. Phase별 cargo/tsc 호출이 누적되는 비용을 회피한다.
 
 ## Phase 5: UI 통합 + 테스트 (병렬)
 
@@ -119,19 +112,31 @@ description: docs/url-auto-matching.md 계획에 따라 URL 자동 매칭 기능
 - `e2e/` Playwright 시나리오 갱신: selectbox 셀렉터 제거 + 매칭/실패 시나리오 추가
 - 산출물: `_workspace/41_tests.md` (테스트 결과 + 벤치 수치)
 
-## Phase 6: 최종 검증 + 사용자 보고
+## Phase 6: 단일 최종 QA 게이트 + 사용자 보고
 
-### 작업 H — integration-qa (재실행)
-- Phase 5 변경 후 다시 정합성 매트릭스 작성 (UI 호출 흐름 추가)
-- `_workspace/50_final_qa.md`
+**핵심**: 모든 sub-agent (rust-backend / frontend / test-engineer)가 작업을 끝낸 뒤 오케스트레이터가 `integration-qa` 에이전트를 **단 한 번** 호출. 이 호출이 정합성 매트릭스 + 풀 빌드 + 풀 테스트를 모두 책임진다.
+
+### 작업 H — integration-qa (단일 호출)
+오케스트레이터는 다음 입력으로 integration-qa를 1회 호출:
+- 작업 A·C 산출물 (Rust 시그니처 표)
+- 작업 D 산출물 (TS invoke 호출 목록)
+- 작업 G 산출물 (작성된 테스트 파일 + 모킹 정의)
+
+integration-qa가 일괄 수행 (debug 디폴트, release/e2e는 opt-in):
+1. 정합성 매트릭스 (정적, read-only) — 4 command + MatchResult 필드 + invoke_handler 등록 누락
+2. `cd src-tauri && cargo check`
+3. `cd src-tauri && cargo test --lib`
+4. `pnpm tsc --noEmit`
+5. `pnpm test` (vitest)
+6. (opt-in) `cargo test --release perf_` — 성능 검증 명시 요청 시
+7. (opt-in) `pnpm test:e2e` — e2e 명시 요청 시
+
+산출물: `_workspace/50_final_qa.md` (매트릭스 + 빌드 결과 + 테스트 카운트 + PASS/FAIL 결론).
 
 ### 오케스트레이터 종합
-- 전체 빌드 검증 실행:
-  ```bash
-  cd src-tauri && cargo check && cargo test
-  cd /Users/univdev/Documents/media-downloader && pnpm tsc --noEmit && pnpm test
-  ```
-- 결과 요약 + 수동 검증 가이드를 사용자에게 보고 (계획 문서 11.4 참조)
+- integration-qa 보고를 받아 사용자에게 단일 요약 (PASS/FAIL + 카운트 + 매트릭스 발췌)
+- 결함 있을 시 책임 에이전트에 1회 수정 사이클 → 재호출
+- 수동 검증 가이드 (계획 문서 11.4) 안내
 - `TeamDelete`로 팀 정리
 
 ## 데이터 전달 프로토콜
@@ -146,13 +151,15 @@ description: docs/url-auto-matching.md 계획에 따라 URL 자동 매칭 기능
 
 ## 에러 핸들링
 
+빌드/테스트 실패는 Phase 6 단일 QA 게이트에서 1회 검출되며, 책임 에이전트에 1 사이클만 위임한다.
+
 | 에러 유형 | 전략 |
 |---|---|
-| `cargo check` 실패 | rust-backend-engineer 1회 재시도. 재실패 시 사용자 보고. |
-| `pnpm tsc --noEmit` 실패 | frontend-engineer 1회 재시도. 재실패 시 사용자 보고. |
-| 정합성 결함 | integration-qa가 책임 에이전트에 SendMessage. 1회 후 잔존 시 에스컬레이션. |
-| 200ms 미달 | test-engineer가 rust-backend에 알림. rust-backend가 인덱스 구조 재검토. |
-| 외부 dep 설치 실패 (react-toastify) | 사용자에게 즉시 보고. |
+| Phase 6: `cargo check`/`cargo test --lib` 실패 | integration-qa → rust-backend-engineer 1회 위임. 재실패 시 사용자 보고. |
+| Phase 6: `pnpm tsc --noEmit`/vitest 실패 | integration-qa → frontend-engineer 또는 test-engineer 1회 위임. 재실패 시 사용자 보고. |
+| Phase 6: 정합성 매트릭스 결함 | integration-qa → 책임 에이전트(rust/frontend/test) SendMessage. 1회 후 잔존 시 에스컬레이션. |
+| 200ms 미달 (opt-in perf 검증) | integration-qa가 rust-backend에 알림. 인덱스 구조 재검토. |
+| 외부 dep 설치 실패 (react-toastify 등) | 사용자에게 즉시 보고. |
 
 ## 모델 설정
 

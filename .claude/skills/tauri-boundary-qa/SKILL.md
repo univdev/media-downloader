@@ -88,9 +88,11 @@ grep -rn "invoke<" /Users/univdev/Documents/media-downloader/src/
 
 직접 수정하지 말고 `SendMessage`로 책임 에이전트에 보고. 1회 재요청 후에도 결함이 남으면 오케스트레이터에 에스컬레이션.
 
-## 7. 빠른 smoke 검증 (선택)
+## 7. 빠른 smoke 검증 (opt-in, 기본 OFF)
 
-가능하면 dev 빌드로 실제 호출 검증:
+`pnpm tauri dev` smoke는 **사용자가 dev 빌드 검증을 명시 요청한 경우에만** 실행한다. 매트릭스가 정합성을 정적으로 보장하므로 통상은 불필요. 매번 자동 시도하지 않는다 (실행 시간 + 환경 의존성 부담).
+
+요청 시 절차:
 ```bash
 pnpm tauri dev
 # 브라우저 콘솔에서 직접 호출:
@@ -98,6 +100,35 @@ pnpm tauri dev
 ```
 
 매트릭스가 OK여도 dev에서 깨지면 정합성 결함이다.
+
+## 8. 최종 단일 QA 게이트 (integration-qa 전용)
+
+본 스킬을 사용하는 `integration-qa`는 모든 sub-agent 작업이 완료된 뒤 오케스트레이터가 1회 호출하는 최종 게이트다. 다음을 순서대로 실행하고 통합 결과를 보고한다:
+
+```bash
+# 1. 정합성 매트릭스 (정적, read-only) — 위 1~6장 절차
+
+# 2. Rust 빌드 + 단위 테스트 (debug, release X)
+cd src-tauri && cargo check
+cd src-tauri && cargo test --lib
+
+# 3. TS 타입 검사
+pnpm tsc --noEmit
+
+# 4. Vitest (전체)
+pnpm test
+
+# 5. (opt-in) perf 벤치
+cd src-tauri && cargo test --release perf_
+
+# 6. (opt-in) Playwright e2e
+pnpm test:e2e
+```
+
+원칙:
+- **debug 디폴트**: 일반 단위 테스트는 `--release` 없이. release는 perf 벤치만.
+- **opt-in 5·6**: 사용자/오케스트레이터가 명시 요청 시만.
+- **단 1회 호출**: Phase 중간 호출하지 않는다. 모든 작업 끝난 뒤 1회.
 
 ## 8. 보고 형식
 

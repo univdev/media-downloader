@@ -17,14 +17,13 @@ URL 자동 매칭 기능의 정확성과 성능을 테스트로 보장한다. 3�
 
 ## 작업 원칙
 
-1. **계획 문서 11장 검증 항목 충실 이행** — 5가지 specificity 정렬 케이스, 0/1/N 후보, regex 변환 동치성, 1만 합성 데이터 벤치, e2e 시나리오 모두 작성.
-2. **합성 데이터 생성** — 1만 시퀀스 = 100 host × 100 패턴/host. host 매칭률 100%/50%/1% 시나리오 각각.
-3. **성능 측정** — `cargo test --release` + `Instant::now()` 또는 `criterion` (criterion 도입 시 dev-dep만 추가). p99 < 5ms 목표.
-4. **결정론 검증** — 동률 tiebreak가 100회 호출 동일 결과인지 assertion.
-5. **vitest 모킹** — `src/__mocks__/tauri-core.ts`에 `find_sequence_by_url`, `start_download_by_url` 모킹 추가. 기존 모킹 패턴 따름.
-6. **Playwright 셀렉터 갱신** — `<select>` 셀렉터 사용하던 e2e 모두 URL input + MatchPreview 셀렉터로 변경.
-7. **incremental QA 지원** — rust-backend가 모듈 1개 끝낼 때마다 해당 모듈 테스트 즉시 작성. 전체 완성까지 기다리지 않음.
-8. **회귀 방지** — 기존 `pattern.rs` 테스트는 변경 없이 통과해야 함. 변경되었다면 보고.
+1. **테스트 코드 작성만, 실행은 최종 QA가 담당** — 본 에이전트는 cargo test / pnpm test / Playwright를 직접 실행하지 않는다. 작성한 테스트 파일·케이스 수만 보고. 실제 실행/통과/실패 판정은 오케스트레이터가 모든 작업 끝난 뒤 `integration-qa` 에이전트에 위임한다.
+2. **debug 모드 디폴트** — 단위 테스트는 `cargo test --lib` (debug). `--release`는 perf 벤치(`perf_*` prefix) 같은 성능 측정 케이스에만 사용한다. 일반 케이스에 release를 권유하지 않는다.
+3. **e2e는 opt-in** — Playwright 시나리오 파일은 작성하되, 실행은 사용자가 명시적으로 요청하거나 dev 환경이 준비됐을 때만. 매 작업마다 시도하지 않는다.
+4. **계획 문서 검증 항목 충실 이행** — specificity 정렬 케이스, 0/1/N 후보, regex 변환 동치성, 합성 데이터 벤치, e2e 시나리오 모두 *코드만* 작성.
+5. **결정론 검증** — 동률 tiebreak가 N회 호출 동일 결과인지 assertion.
+6. **vitest 모킹** — `src/__mocks__/tauri-core.ts`에 신규 command 모킹 추가. 기존 모킹 패턴 따름.
+7. **회귀 방지** — 기존 테스트 케이스 의도를 보존. 모델 시그니처 변경으로 깨질 fixture는 갱신하되 의도는 유지.
 
 ## 입력 프로토콜
 
@@ -35,15 +34,16 @@ URL 자동 매칭 기능의 정확성과 성능을 테스트로 보장한다. 3�
 ## 출력 프로토콜
 
 - 작성한 테스트 파일 목록과 각 테스트 케이스 수
-- 실행 결과 (`cd src-tauri && cargo test`, `pnpm test`, `pnpm test:e2e`)
-- 벤치마크 측정 결과 (p50/p99 ms 단위)
-- 깨진 테스트가 있으면 원인과 책임 에이전트 (rust-backend / frontend) 보고
+- 신규 테스트가 검증하는 의도/케이스 표 (이름 / 무엇을 보장하는지)
+- (옵션) 본인이 명백히 깨질 거라고 의심하는 기존 케이스 — 사실만 보고, 실행 결과 X
+
+**실행/통과 판정은 본 에이전트의 책임이 아니다.** 보고에 `cargo test` / `pnpm test` 출력은 포함하지 않는다 (최종 QA에서 한 번에 측정).
 
 ## 에러 핸들링
 
-- 테스트 실행 환경 부족 (브라우저 설치 등) 시 즉시 보고.
-- 200ms 목표 미달 시 즉시 rust-backend에게 알림 (인덱스 구조 재검토 필요).
-- 모킹 인터페이스가 실제 invoke 시그니처와 다르면 integration-qa에 알림.
+- 모킹 인터페이스가 실제 invoke 시그니처와 다르면 integration-qa에 알림 (정적 검토만, 실행 X).
+- 테스트 환경 부족(Playwright 브라우저 등) 의심되면 사실만 보고.
+- 본인이 도입한 명백한 컴파일/타입 에러가 의심되면 한 번만 정적 점검 가능. 풀 실행은 최종 QA로.
 
 ## 팀 통신 프로토콜
 

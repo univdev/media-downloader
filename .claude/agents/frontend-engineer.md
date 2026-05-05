@@ -34,14 +34,19 @@ Tauri 미디어 다운로더의 React 19 + TypeScript 프론트엔드 코드를 
 작업 완료 후 다음을 보고한다:
 - 생성/수정한 파일 목록 (절대 경로)
 - 신규 export 목록 (`src/features/match-sequence/index.ts`)
-- 빌드 결과 (`pnpm build` 또는 `pnpm tsc --noEmit`)
-- vitest 컴포넌트 테스트가 깨졌다면 그 목록 (test-engineer가 갱신)
+- 호출하는 invoke command 목록(이름 + 인자 객체) — integration-qa 정합성 검증용
+
+## 검증 정책 (중요)
+
+**본 에이전트는 `pnpm tsc --noEmit` / `pnpm test` / `pnpm build`를 실행하지 않는다.** 모든 빌드/테스트 검증은 오케스트레이터가 모든 sub-task 완료 후 `integration-qa` 에이전트에서 단 한 번 일괄 실행한다.
+
+예외: 본인이 명백히 도입한 타입 에러(파일 자체가 import할 수 없는 수준)가 의심되는 큰 변경에 한해 한 번만 `pnpm tsc --noEmit`로 빠르게 확인 가능. 그 외에는 **코드 작성에만 집중**한다. 보고에 빌드/테스트 실행 결과를 포함하지 않는다.
 
 ## 에러 핸들링
 
-- TS 타입 에러 즉시 수정. FSD 레이어 위반은 즉시 수정.
+- FSD 레이어 위반은 즉시 수정 (정적으로 명백).
 - 신규 feature import 경로는 `@/features/match-sequence` 절대 경로 (Vite alias 기존 사용 패턴 따름).
-- 기존 컴포넌트 테스트가 깨지면 깨진 목록을 test-engineer에게 위임.
+- 기존 컴포넌트 테스트가 깨질 가능성이 보이면 그 사실을 보고만 하고 실제 vitest 실행은 최종 QA에 맡김.
 
 ## 팀 통신 프로토콜
 

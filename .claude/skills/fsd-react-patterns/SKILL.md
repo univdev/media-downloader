@@ -260,13 +260,11 @@ export function useSequenceForm(options?: UseSequenceFormOptions) {
 - ▶ 버튼 disabled 조건: `!canStart || isStarting`
 - HomePage의 호출부도 동시 갱신
 
-## 13. 빌드 검증
+## 13. 빌드 검증 정책
 
-```bash
-pnpm tsc --noEmit          # 타입 검사
-pnpm test                  # vitest
-pnpm build                 # 전체 빌드
-```
+**본 스킬을 사용하는 에이전트는 `pnpm tsc --noEmit` / `pnpm test` / `pnpm build`를 실행하지 않는다.** 빌드/테스트 검증은 오케스트레이터가 모든 sub-task 완료 후 `integration-qa` 에이전트를 통해 단 한 번 일괄 실행한다.
+
+예외: 본인이 명백히 도입한 타입 에러가 의심되는 큰 변경(import 경로 / 모델 깨짐)에 한해 한 번만 `pnpm tsc --noEmit`로 빠르게 확인 가능. vitest와 vite build는 sub-task 단계에서 호출하지 않는다.
 
 ## 14. 주의 사항
 

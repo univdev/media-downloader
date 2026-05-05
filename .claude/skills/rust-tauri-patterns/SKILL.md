@@ -272,15 +272,11 @@ pub async fn delete_sequence(
 - `download::start_download_by_url` 추가
 - `sequence::find_sequence_by_url` 추가
 
-## 10. 빌드 검증
+## 10. 빌드 검증 정책
 
-작업 후 반드시:
-```bash
-cd src-tauri && cargo check
-cd src-tauri && cargo test --lib
-```
+**본 스킬을 사용하는 에이전트는 `cargo check` / `cargo test`를 실행하지 않는다.** 빌드/테스트 검증은 오케스트레이터가 모든 sub-task 완료 후 `integration-qa` 에이전트를 통해 단 한 번 일괄 실행한다.
 
-`cargo check` 실패 시 즉시 수정. 1회 재시도 후 실패 시 오케스트레이터에 보고.
+예외: 본인이 명백히 도입한 컴파일 에러가 의심되는 큰 변경(트레이트 impl 누락, 모델 시그니처 깨짐 등)에 한해 한 번만 `cargo check`로 빠르게 확인 가능. 그 외에는 코드 작성에만 집중하고 결과 보고에 cargo 실행 출력을 포함하지 않는다.
 
 ## 11. 주의 사항
 
