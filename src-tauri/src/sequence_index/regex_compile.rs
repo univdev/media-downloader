@@ -35,7 +35,12 @@ pub fn compile_to_regex(
             }
             UrlSegment::IndexRange { .. } => {
                 prefix_done = true;
-                pattern.push_str(r"\d+");
+                if capture_names.iter().any(|n| n == "index") {
+                    pattern.push_str(r"\d+");
+                } else {
+                    pattern.push_str(r"(?P<index>\d+)");
+                    capture_names.push("index".to_string());
+                }
             }
             UrlSegment::StringArray(items) => {
                 prefix_done = true;
@@ -47,9 +52,7 @@ pub fn compile_to_regex(
 
     pattern.push('$');
 
-    let regex = RegexBuilder::new(&pattern)
-        .size_limit(1_000_000)
-        .build()?;
+    let regex = RegexBuilder::new(&pattern).size_limit(1_000_000).build()?;
 
     Ok((regex, capture_names, literal_prefix))
 }

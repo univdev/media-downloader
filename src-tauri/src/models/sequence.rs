@@ -26,9 +26,42 @@ pub struct Sequence {
     pub version: String,
     pub meta: SequenceMeta,
     pub url_pattern: String,
+    #[serde(default)]
+    pub match_patterns: Vec<String>,
+    pub crawl_url_pattern: Option<String>,
     pub media_url_pattern: Option<String>,
     pub selectors: SequenceSelectors,
     pub naming: SequenceNaming,
+}
+
+impl Sequence {
+    pub fn effective_match_patterns(&self) -> Vec<String> {
+        let patterns: Vec<String> = self
+            .match_patterns
+            .iter()
+            .map(|p| p.trim())
+            .filter(|p| !p.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+
+        if patterns.is_empty() {
+            vec![self.url_pattern.clone()]
+        } else {
+            patterns
+        }
+    }
+
+    pub fn effective_crawl_url_pattern(&self) -> &str {
+        self.crawl_url_pattern
+            .as_deref()
+            .filter(|p| !p.trim().is_empty())
+            .or_else(|| {
+                self.media_url_pattern
+                    .as_deref()
+                    .filter(|p| !p.trim().is_empty())
+            })
+            .unwrap_or(&self.url_pattern)
+    }
 }
 
 #[cfg(test)]
@@ -58,6 +91,8 @@ mod migration_tests {
                 updated_at: "2026-01-01T00:00:00Z".to_string(),
             },
             url_pattern: "https://example.com/{id}".to_string(),
+            match_patterns: vec![],
+            crawl_url_pattern: None,
             media_url_pattern: None,
             selectors: SequenceSelectors {
                 media: ".gallery img".to_string(),

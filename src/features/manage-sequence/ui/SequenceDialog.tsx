@@ -43,39 +43,71 @@ export function SequenceDialogContent({
         />
       </div>
 
-      <UrlPatternEditor
-        value={form.urlPattern}
-        error={form.errors.url_pattern}
-        onChange={form.setUrlPattern}
-      />
-
-      <PatternPreview urlPattern={form.urlPattern} />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium">입력 URL 패턴</label>
+          <button
+            type="button"
+            className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80"
+            onClick={form.addMatchPattern}
+          >
+            패턴 추가
+          </button>
+        </div>
+        <div className="space-y-2">
+          {form.matchPatterns.map((pattern, index) => (
+            <div key={index} className="space-y-1">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <UrlPatternEditor
+                    value={pattern}
+                    error={index === 0 ? form.errors.url_pattern : undefined}
+                    onChange={(value) => form.setMatchPatternAt(index, value)}
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => form.removeMatchPattern(index)}
+                  disabled={form.matchPatterns.length <= 1}
+                >
+                  삭제
+                </Button>
+              </div>
+              {pattern && <PatternPreview urlPattern={pattern} />}
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium">미디어 URL 패턴</label>
+          <label className="text-sm font-medium">탐색 URL 패턴</label>
           <button
             type="button"
             className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80"
             onClick={form.copyEntryToMedia}
           >
-            엔트리 URL과 동일
+            첫 입력 패턴과 동일
           </button>
         </div>
         <input
           type="text"
           className="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
-          placeholder="비워두면 엔트리 URL에서 직접 미디어 추출"
-          value={form.mediaUrlPattern}
-          onChange={(e) => form.setMediaUrlPattern(e.target.value)}
+          placeholder="실제로 순차 탐색할 URL 패턴"
+          value={form.crawlUrlPattern}
+          onChange={(e) => form.setCrawlUrlPattern(e.target.value)}
         />
+        {form.errors.crawl_url_pattern && (
+          <p className="text-xs text-destructive">{form.errors.crawl_url_pattern}</p>
+        )}
         <p className="text-xs text-muted-foreground">
-          엔트리 URL과 다운로드 URL이 다를 경우 설정. {"{id}"}, {"{page}"} 등 캡처 변수 사용 가능.
+          입력 URL 패턴에서 추출한 {"{id}"}, {"{index}"} 등을 사용해 실제 방문 URL을 만듭니다.
         </p>
       </div>
 
-      {form.mediaUrlPattern && (
-        <PatternPreview urlPattern={form.mediaUrlPattern} />
+      {form.crawlUrlPattern && (
+        <PatternPreview urlPattern={form.crawlUrlPattern} />
       )}
 
       <SelectorList

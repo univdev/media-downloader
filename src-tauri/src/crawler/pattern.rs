@@ -57,7 +57,9 @@ pub fn parse_url_pattern(input: &str) -> Result<ParsedUrlPattern, PatternError> 
             let inner = &remaining[2..end];
             let items: Vec<String> = inner.split(',').map(|s| s.trim().to_string()).collect();
             if items.is_empty() {
-                return Err(PatternError::InvalidSyntax("Empty string array".to_string()));
+                return Err(PatternError::InvalidSyntax(
+                    "Empty string array".to_string(),
+                ));
             }
             segments.push(UrlSegment::StringArray(items));
             remaining = &remaining[end + 2..];
@@ -67,7 +69,9 @@ pub fn parse_url_pattern(input: &str) -> Result<ParsedUrlPattern, PatternError> 
                 .ok_or_else(|| PatternError::InvalidSyntax("Unclosed {name}".to_string()))?;
             let name = remaining[1..end].to_string();
             if name.is_empty() {
-                return Err(PatternError::InvalidSyntax("Empty capture name".to_string()));
+                return Err(PatternError::InvalidSyntax(
+                    "Empty capture name".to_string(),
+                ));
             }
             segments.push(UrlSegment::NamedCapture(name));
             remaining = &remaining[end + 1..];
@@ -191,6 +195,28 @@ pub fn apply_captures(
     parse_url_pattern(&resolved)
 }
 
+pub fn apply_captures_with_index_start(
+    pattern: &str,
+    captures: &HashMap<String, String>,
+) -> Result<ParsedUrlPattern, PatternError> {
+    let mut parsed = apply_captures(pattern, captures)?;
+    let Some(index) = captures.get("index") else {
+        return Ok(parsed);
+    };
+    let start = index
+        .parse::<u32>()
+        .map_err(|_| PatternError::InvalidIndex(format!("Invalid captured index: {}", index)))?;
+
+    for segment in &mut parsed.segments {
+        if let UrlSegment::IndexRange { start: s, .. } = segment {
+            *s = start;
+            break;
+        }
+    }
+
+    Ok(parsed)
+}
+
 fn find_next_literal(segments: &[UrlSegment], from: usize) -> Option<String> {
     for seg in segments.iter().skip(from) {
         if let UrlSegment::Literal(s) = seg {
@@ -201,7 +227,35 @@ fn find_next_literal(segments: &[UrlSegment], from: usize) -> Option<String> {
 }
 
 impl ParsedUrlPattern {
+    pub fn to_pattern_string(&self) -> String {
+        let mut out = String::new();
+        for segment in &self.segments {
+            match segment {
+                UrlSegment::Literal(s) => out.push_str(s),
+                UrlSegment::IndexRange { start, to } => {
+                    if let Some(to) = to {
+                        out.push_str(&format!("{{index:start={},to={}}}", start, to));
+                    } else {
+                        out.push_str(&format!("{{index:start={}}}", start));
+                    }
+                }
+                UrlSegment::StringArray(items) => {
+                    out.push_str(&format!("{{[{}]}}", items.join(", ")));
+                }
+                UrlSegment::Wildcard => out.push_str("{*}"),
+                UrlSegment::NamedCapture(name) => {
+                    out.push_str(&format!("{{{}}}", name));
+                }
+            }
+        }
+        out
+    }
+
     pub fn generate_urls(&self) -> Vec<String> {
+        self.generate_urls_limited(None)
+    }
+
+    pub fn generate_urls_limited(&self, open_limit: Option<u32>) -> Vec<String> {
         let mut results = vec!["".to_string()];
 
         for segment in &self.segments {
@@ -213,7 +267,7 @@ impl ParsedUrlPattern {
                     }
                 }
                 UrlSegment::IndexRange { start, to } => {
-                    let end = to.unwrap_or(start + 100);
+                    let end = to.unwrap_or(start.saturating_add(open_limit.unwrap_or(100)));
                     for i in *start..=end {
                         for r in &results {
                             new_results.push(format!("{}{}", r, i));
@@ -274,8 +328,7 @@ mod tests {
 
     #[test]
     fn test_parse_string_array() {
-        let pattern =
-            parse_url_pattern("https://example.com/{[cats, dogs, birds]}/photo").unwrap();
+        let pattern = parse_url_pattern("https://example.com/{[cats, dogs, birds]}/photo").unwrap();
         let urls = pattern.generate_urls();
         assert_eq!(
             urls,
@@ -289,10 +342,8 @@ mod tests {
 
     #[test]
     fn test_parse_combined_pattern() {
-        let pattern = parse_url_pattern(
-            "https://example.com/{[a, b]}/page/{index:start=0,to=1}",
-        )
-        .unwrap();
+        let pattern =
+            parse_url_pattern("https://example.com/{[a, b]}/page/{index:start=0,to=1}").unwrap();
         let urls = pattern.generate_urls();
         assert_eq!(
             urls,
@@ -336,8 +387,7 @@ mod tests {
     #[test]
     fn test_match_simple_capture() {
         let pattern = parse_url_pattern("https://example.com/{id}.html").unwrap();
-        let captures =
-            match_and_capture(&pattern, "https://example.com/42856.html").unwrap();
+        let captures = match_and_capture(&pattern, "https://example.com/42856.html").unwrap();
         assert_eq!(captures.get("id").unwrap(), "42856");
     }
 
@@ -351,18 +401,14 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            captures.get("id").unwrap(),
-            "some-long-title-42856"
-        );
+        assert_eq!(captures.get("id").unwrap(), "some-long-title-42856");
         assert_eq!(captures.get("page").unwrap(), "1");
         assert!(!captures.contains_key("*"));
     }
 
     #[test]
     fn test_match_multiple_captures() {
-        let pattern =
-            parse_url_pattern("https://cdn.example.com/{domain}/{album}/{file}").unwrap();
+        let pattern = parse_url_pattern("https://cdn.example.com/{domain}/{album}/{file}").unwrap();
         let captures = match_and_capture(
             &pattern,
             "https://cdn.example.com/photos/vacation/sunset.jpg",

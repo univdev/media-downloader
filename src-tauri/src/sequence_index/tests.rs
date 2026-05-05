@@ -28,6 +28,8 @@ fn make_sequence(name: &str, pattern: &str) -> Sequence {
             updated_at: "2026-04-26T00:00:00Z".to_string(),
         },
         url_pattern: pattern.to_string(),
+        match_patterns: vec![],
+        crawl_url_pattern: None,
         media_url_pattern: None,
         selectors: SequenceSelectors {
             media: "img".to_string(),
@@ -43,7 +45,11 @@ fn make_sequence(name: &str, pattern: &str) -> Sequence {
 /// Build a `CompiledSequence` (not wrapped in Arc) for direct specificity comparison.
 fn make_compiled(name: &str, pattern: &str) -> CompiledSequence {
     let seq = make_sequence(name, pattern);
-    super::compile_sequence(&seq).expect("compile_sequence failed")
+    super::compile_sequence(&seq)
+        .expect("compile_sequence failed")
+        .into_iter()
+        .next()
+        .expect("compiled sequence missing")
 }
 
 /// Build an index from a list of (name, pattern) tuples.
@@ -171,6 +177,48 @@ fn find_best_tied_lists_others() {
     assert_eq!(all, vec!["a", "b", "c"]);
 }
 
+#[test]
+fn find_best_matches_multiple_input_patterns_for_one_sequence() {
+    let mut seq = make_sequence(
+        "gallery",
+        "https://example.test/reader/{id}.html#{index:start=1}",
+    );
+    seq.match_patterns = vec![
+        "https://example.test/reader/{id}.html#{index:start=1}".to_string(),
+        "https://example.test/imageset/{slug}-{id}.html#{index:start=1}".to_string(),
+    ];
+
+    let mut idx = SequenceIndex::new();
+    idx.upsert(&seq);
+
+    let reader = idx
+        .find_best("https://example.test/reader/3921630.html#3")
+        .expect("reader URL should match");
+    assert_eq!(reader.sequence_name, "gallery");
+    assert_eq!(
+        reader.captures.get("id").map(String::as_str),
+        Some("3921630")
+    );
+    assert_eq!(reader.captures.get("index").map(String::as_str), Some("3"));
+
+    let imageset = idx
+        .find_best("https://example.test/imageset/title-with-dashes-3921630.html#5")
+        .expect("imageset URL should match");
+    assert_eq!(imageset.sequence_name, "gallery");
+    assert_eq!(
+        imageset.captures.get("id").map(String::as_str),
+        Some("3921630")
+    );
+    assert_eq!(
+        imageset.captures.get("slug").map(String::as_str),
+        Some("title-with-dashes")
+    );
+    assert_eq!(
+        imageset.captures.get("index").map(String::as_str),
+        Some("5")
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 3. Regex equivalence with match_and_capture
 // ---------------------------------------------------------------------------
@@ -186,10 +234,7 @@ fn regex_extracts_same_captures_as_match_and_capture() {
         regex_compile::compile_to_regex(&parsed).expect("regex compile failed");
     let caps = regex.captures(url).expect("regex did not match");
 
-    assert_eq!(
-        legacy.get("id").unwrap(),
-        caps.name("id").unwrap().as_str()
-    );
+    assert_eq!(legacy.get("id").unwrap(), caps.name("id").unwrap().as_str());
 }
 
 #[test]
@@ -211,6 +256,28 @@ fn regex_equivalence_multiple_captures() {
             n
         );
     }
+}
+
+#[test]
+fn apply_captures_with_index_start_updates_crawl_pattern_start() {
+    let mut captures = std::collections::HashMap::new();
+    captures.insert("id".to_string(), "3921630".to_string());
+    captures.insert("index".to_string(), "4".to_string());
+
+    let parsed = crate::crawler::pattern::apply_captures_with_index_start(
+        "https://example.test/reader/{id}.html#{index:start=1}-",
+        &captures,
+    )
+    .expect("captures should apply");
+
+    assert_eq!(
+        parsed.generate_urls_limited(Some(2)),
+        vec![
+            "https://example.test/reader/3921630.html#4-",
+            "https://example.test/reader/3921630.html#5-",
+            "https://example.test/reader/3921630.html#6-",
+        ]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +304,7 @@ fn build_synthetic_index(host_count: usize, patterns_per_host: usize) -> Sequenc
 }
 
 #[test]
+#[ignore = "performance benchmark; run with cargo test --release perf_find_best_10k_under_5ms_p99 -- --ignored --nocapture"]
 fn perf_find_best_10k_under_5ms_p99() {
     // 100 hosts × 100 patterns/host = 10_000 sequences.
     let host_count = 100usize;

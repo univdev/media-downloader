@@ -38,7 +38,7 @@ pub struct MatchResult {
 #[derive(Default)]
 pub struct SequenceIndex {
     by_host: HashMap<String, Vec<Arc<CompiledSequence>>>,
-    name_to_arc: HashMap<String, Arc<CompiledSequence>>,
+    name_to_arcs: HashMap<String, Vec<Arc<CompiledSequence>>>,
 }
 
 impl SequenceIndex {
@@ -88,7 +88,9 @@ impl SequenceIndex {
             };
             match compile_sequence(&seq) {
                 Some(compiled) => {
-                    index.insert_compiled(compiled);
+                    for c in compiled {
+                        index.insert_compiled(c);
+                    }
                 }
                 None => {
                     eprintln!(
@@ -109,7 +111,9 @@ impl SequenceIndex {
         let name = sequence.meta.name.clone();
         self.remove(&name);
         if let Some(compiled) = compile_sequence(sequence) {
-            self.insert_compiled(compiled);
+            for c in compiled {
+                self.insert_compiled(c);
+            }
         } else {
             eprintln!(
                 "[sequence_index] upsert: skipped sequence '{}' (compile failure)",
@@ -121,11 +125,15 @@ impl SequenceIndex {
     /// Remove a sequence by its name. Looks up the host bucket via
     /// `name_to_arc`, then drops the matching entry from that bucket.
     pub fn remove(&mut self, name: &str) {
-        if let Some(existing) = self.name_to_arc.remove(name) {
-            if let Some(bucket) = self.by_host.get_mut(&existing.host_key) {
-                bucket.retain(|c| c.name != name);
-                if bucket.is_empty() {
-                    self.by_host.remove(&existing.host_key);
+        if let Some(existing) = self.name_to_arcs.remove(name) {
+            for compiled in existing {
+                if let Some(bucket) = self.by_host.get_mut(&compiled.host_key) {
+                    bucket.retain(|c| {
+                        !(c.name == name && c.url_pattern_raw == compiled.url_pattern_raw)
+                    });
+                    if bucket.is_empty() {
+                        self.by_host.remove(&compiled.host_key);
+                    }
                 }
             }
         }
@@ -133,7 +141,10 @@ impl SequenceIndex {
 
     fn insert_compiled(&mut self, compiled: CompiledSequence) {
         let arc = Arc::new(compiled);
-        self.name_to_arc.insert(arc.name.clone(), arc.clone());
+        self.name_to_arcs
+            .entry(arc.name.clone())
+            .or_default()
+            .push(arc.clone());
         self.by_host
             .entry(arc.host_key.clone())
             .or_default()
@@ -219,45 +230,54 @@ impl SequenceIndex {
 
 /// Compile a `Sequence` into a `CompiledSequence`.
 /// Returns `None` if any step (URL pattern parsing or regex compilation) fails.
-fn compile_sequence(sequence: &Sequence) -> Option<CompiledSequence> {
-    let parsed = match parse_url_pattern(&sequence.url_pattern) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!(
-                "[sequence_index] parse_url_pattern failed for '{}': {}",
-                sequence.meta.name, e
-            );
-            return None;
-        }
-    };
+fn compile_sequence(sequence: &Sequence) -> Option<Vec<CompiledSequence>> {
+    let mut compiled = Vec::new();
 
-    let (regex, capture_names, literal_prefix) =
-        match regex_compile::compile_to_regex(&parsed) {
+    for pattern in sequence.effective_match_patterns() {
+        let parsed = match parse_url_pattern(&pattern) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!(
+                    "[sequence_index] parse_url_pattern failed for '{}': {}",
+                    sequence.meta.name, e
+                );
+                continue;
+            }
+        };
+
+        let (regex, capture_names, literal_prefix) = match regex_compile::compile_to_regex(&parsed)
+        {
             Ok(r) => r,
             Err(e) => {
                 eprintln!(
                     "[sequence_index] compile_to_regex failed for '{}': {}",
                     sequence.meta.name, e
                 );
-                return None;
+                continue;
             }
         };
 
-    let host_key = url::Url::parse(&literal_prefix)
-        .ok()
-        .map(|u| format!("{}://{}", u.scheme(), u.host_str().unwrap_or("")))
-        .unwrap_or_else(|| FALLBACK_HOST_KEY.to_string());
+        let host_key = url::Url::parse(&literal_prefix)
+            .ok()
+            .map(|u| format!("{}://{}", u.scheme(), u.host_str().unwrap_or("")))
+            .unwrap_or_else(|| FALLBACK_HOST_KEY.to_string());
 
-    let specificity =
-        specificity::compute(&parsed, &sequence.meta.name, &sequence.url_pattern);
+        let specificity = specificity::compute(&parsed, &sequence.meta.name, &pattern);
 
-    Some(CompiledSequence {
-        name: sequence.meta.name.clone(),
-        url_pattern_raw: sequence.url_pattern.clone(),
-        regex,
-        literal_prefix,
-        host_key,
-        specificity,
-        capture_names,
-    })
+        compiled.push(CompiledSequence {
+            name: sequence.meta.name.clone(),
+            url_pattern_raw: pattern,
+            regex,
+            literal_prefix,
+            host_key,
+            specificity,
+            capture_names,
+        });
+    }
+
+    if compiled.is_empty() {
+        None
+    } else {
+        Some(compiled)
+    }
 }

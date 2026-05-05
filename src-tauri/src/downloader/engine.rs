@@ -15,6 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 const MAX_RETRIES: u32 = 3;
 const MAX_CONCURRENT_DOWNLOADS: usize = 3;
+const MAX_OPEN_SCAN_URLS: u32 = 10_000;
 
 pub struct DownloadEngine {
     pub cancel_token: CancellationToken,
@@ -124,7 +125,11 @@ impl DownloadEngine {
                 break;
             }
 
-            let permit = semaphore.clone().acquire_owned().await.map_err(|e| e.to_string())?;
+            let permit = semaphore
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| e.to_string())?;
             let app_clone = app.clone();
             let conn_clone = conn.clone();
             let cancel = self.cancel_token.clone();
@@ -186,8 +191,7 @@ impl DownloadEngine {
                     }
                 }
 
-                let current_completed =
-                    completed_clone.load(std::sync::atomic::Ordering::Relaxed);
+                let current_completed = completed_clone.load(std::sync::atomic::Ordering::Relaxed);
                 let current_failed = failed_clone.load(std::sync::atomic::Ordering::Relaxed);
 
                 let _ = app_clone.emit(
@@ -276,15 +280,20 @@ impl DownloadEngine {
         sequence: &Sequence,
     ) -> Result<Vec<ScannedMedia>, Box<dyn std::error::Error + Send + Sync>> {
         let parsed = parse_url_pattern(&sequence.url_pattern)?;
-        let has_open_index = parsed.segments.iter().any(|s| {
-            matches!(s, UrlSegment::IndexRange { to: None, .. })
-        });
+        let has_open_index = parsed
+            .segments
+            .iter()
+            .any(|s| matches!(s, UrlSegment::IndexRange { to: None, .. }));
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()?;
 
-        let urls = parsed.generate_urls();
+        let urls = parsed.generate_urls_limited(if has_open_index {
+            Some(MAX_OPEN_SCAN_URLS)
+        } else {
+            None
+        });
         let mut all_media = Vec::new();
 
         for (i, url) in urls.iter().enumerate() {
@@ -362,7 +371,15 @@ impl DownloadEngine {
         // The entry URL pattern is used for matching (not generation).
         // The actual concrete URL comes from url_pattern used as-is if it has no
         // generation tokens, or from generate_urls() if it does.
-        let entry_urls = entry_parsed.generate_urls();
+        let entry_has_open_index = entry_parsed
+            .segments
+            .iter()
+            .any(|s| matches!(s, UrlSegment::IndexRange { to: None, .. }));
+        let entry_urls = entry_parsed.generate_urls_limited(if entry_has_open_index {
+            Some(MAX_OPEN_SCAN_URLS)
+        } else {
+            None
+        });
 
         // For each entry URL, capture variables and build media URLs
         let client = reqwest::Client::builder()
@@ -384,10 +401,15 @@ impl DownloadEngine {
 
             // Apply captures to media URL pattern and generate media URLs
             let media_parsed = apply_captures(media_pattern_str, &captures)?;
-            let media_has_open_index = media_parsed.segments.iter().any(|s| {
-                matches!(s, UrlSegment::IndexRange { to: None, .. })
+            let media_has_open_index = media_parsed
+                .segments
+                .iter()
+                .any(|s| matches!(s, UrlSegment::IndexRange { to: None, .. }));
+            let media_urls = media_parsed.generate_urls_limited(if media_has_open_index {
+                Some(MAX_OPEN_SCAN_URLS)
+            } else {
+                None
             });
-            let media_urls = media_parsed.generate_urls();
 
             for (j, media_url) in media_urls.iter().enumerate() {
                 if self.cancel_token.is_cancelled() {

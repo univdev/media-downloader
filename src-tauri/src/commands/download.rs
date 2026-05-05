@@ -1,3 +1,4 @@
+use crate::crawler::pattern::apply_captures_with_index_start;
 use crate::db::download_repo;
 use crate::downloader::engine::DownloadEngine;
 use crate::models::sequence::Sequence;
@@ -23,10 +24,13 @@ static DOWNLOAD_MANAGER: std::sync::LazyLock<Mutex<DownloadManager>> =
     std::sync::LazyLock::new(|| Mutex::new(DownloadManager::new()));
 
 fn sequences_dir(app: &tauri::AppHandle) -> PathBuf {
-    let base = app
-        .path()
-        .resource_dir()
-        .unwrap_or_else(|_| std::env::current_exe().unwrap().parent().unwrap().to_path_buf());
+    let base = app.path().resource_dir().unwrap_or_else(|_| {
+        std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf()
+    });
     base.join("sequences")
 }
 
@@ -53,8 +57,14 @@ pub async fn start_download_by_url(
     let json = std::fs::read_to_string(dir.join(&file_name)).map_err(|e| e.to_string())?;
     let mut sequence: Sequence = serde_json::from_str(&json).map_err(|e| e.to_string())?;
 
-    // 3. url_pattern을 입력 URL로 오버라이드
-    sequence.url_pattern = url.clone();
+    // 3. 입력 URL에서 추출한 캡처를 실제 탐색 URL 패턴에 적용한다.
+    //    원본 매칭 패턴을 입력 URL 한 건으로 덮어쓰면 열린 index 탐색이 사라진다.
+    let crawl_pattern = sequence.effective_crawl_url_pattern().to_string();
+    let resolved = apply_captures_with_index_start(&crawl_pattern, &match_result.captures)
+        .map_err(|e| e.to_string())?;
+    sequence.url_pattern = resolved.to_pattern_string();
+    sequence.media_url_pattern = None;
+    sequence.crawl_url_pattern = None;
     let sequence_json = serde_json::to_string(&sequence).map_err(|e| e.to_string())?;
 
     // 4. DB insert + engine spawn (기존 start_download 본문 그대로)

@@ -109,9 +109,43 @@ describe("useSequenceForm", () => {
     expect(parsed.version).toBe("1.0");
     expect(parsed.meta.name).toBe("Test Sequence");
     expect(parsed.url_pattern).toBe("https://example.com/{index:start=0,to=5}");
+    expect(parsed.match_patterns).toEqual(["https://example.com/{index:start=0,to=5}"]);
+    expect(parsed.crawl_url_pattern).toBe("https://example.com/{index:start=0,to=5}");
     expect(parsed.selectors.media).toBe(".img");
     expect(parsed.naming.folder).toBe("test_folder");
     expect(parsed.naming.folder_source).toBe("literal");
+  });
+
+  it("여러 입력 URL 패턴과 탐색 URL 패턴을 JSON으로 저장한다", () => {
+    const { result } = renderHook(() => useSequenceForm());
+
+    act(() => {
+      result.current.setName("Multi Pattern");
+      result.current.setUrlPattern("https://example.test/reader/{id}.html#{index:start=1}");
+      result.current.addMatchPattern();
+    });
+
+    act(() => {
+      result.current.setMatchPatternAt(
+        1,
+        "https://example.test/imageset/{slug}-{id}.html#{index:start=1}",
+      );
+      result.current.setCrawlUrlPattern(
+        "https://example.test/reader/{id}.html#{index:start=1}-",
+      );
+      result.current.setMediaSelector("img");
+      result.current.setFolderPattern("folder");
+    });
+
+    const parsed = JSON.parse(result.current.toJson());
+    expect(parsed.match_patterns).toEqual([
+      "https://example.test/reader/{id}.html#{index:start=1}",
+      "https://example.test/imageset/{slug}-{id}.html#{index:start=1}",
+    ]);
+    expect(parsed.crawl_url_pattern).toBe(
+      "https://example.test/reader/{id}.html#{index:start=1}-",
+    );
+    expect(parsed.media_url_pattern).toBeNull();
   });
 
   it("신규 시퀀스 생성 시 file 관련 필드가 결과에 없다", () => {
@@ -161,6 +195,8 @@ describe("useSequenceForm", () => {
 
     expect(result.current.name).toBe("Existing");
     expect(result.current.urlPattern).toBe("https://test.com/{index:start=1,to=5}");
+    expect(result.current.matchPatterns).toEqual(["https://test.com/{index:start=1,to=5}"]);
+    expect(result.current.crawlUrlPattern).toBe("https://test.com/{index:start=1,to=5}");
     expect(result.current.folderSource).toBe("selector");
     expect(result.current.folderNameSelector).toBe("h1.title");
   });

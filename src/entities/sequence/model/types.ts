@@ -20,6 +20,8 @@ export interface Sequence {
   version: string;
   meta: SequenceMeta;
   url_pattern: string;
+  match_patterns?: string[];
+  crawl_url_pattern?: string | null;
   media_url_pattern: string | null;
   selectors: SequenceSelectors;
   naming: SequenceNaming;
