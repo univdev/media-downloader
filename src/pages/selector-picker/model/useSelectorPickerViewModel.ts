@@ -1,34 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { emitTo } from "@tauri-apps/api/event";
-import { fetchHtml, prettifyHtml, closeWindow } from "@/features/manage-sequence";
+import { emit, emitTo } from "@tauri-apps/api/event";
+import {
+  fetchHtml,
+  fetchRenderedPage,
+  prettifyHtml,
+  closeWindow,
+  type RenderedElement,
+  type RenderedPagePayload,
+} from "@/features/manage-sequence";
 import { buildSelector } from "./buildSelector";
 import { buildLineIndex } from "./lineToElement";
 import { isMinified } from "./detectMinified";
+import { parseLocationHash, type ParsedHash } from "./parseLocationHash";
 
 export type SelectorPickerStep = "input" | "loading" | "ready" | "error";
+export type SelectorPickerTab = "html" | "snapshot";
 
 const MAX_LINE_COUNT = 50_000;
 
 interface SelectedItem {
-  line: number;
+  line: number | null;
   selector: string;
-}
-
-interface ParsedHash {
-  target: string;
-  parent: string;
-  windowLabel: string;
-}
-
-function parseLocationHash(hash: string, fallbackLabel: string): ParsedHash {
-  // hash format: "#?target=media&parent=main"
-  const queryStr = hash.replace(/^#\??/, "");
-  const params = new URLSearchParams(queryStr);
-  return {
-    target: params.get("target") ?? "",
-    parent: params.get("parent") ?? "",
-    windowLabel: params.get("label") ?? fallbackLabel,
-  };
 }
 
 function getCurrentLabel(): string {
@@ -56,6 +48,9 @@ export function useSelectorPickerViewModel() {
   const [isPretty, setIsPretty] = useState(false);
   const [isPrettifying, setIsPrettifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderedPage, setRenderedPage] = useState<RenderedPagePayload | null>(null);
+  const [activeTab, setActiveTab] = useState<SelectorPickerTab>("html");
   const [selected, setSelected] = useState<SelectedItem[]>([]);
 
   const lineIndex = useMemo(() => buildLineIndex(displayHtml), [displayHtml]);
@@ -63,7 +58,7 @@ export function useSelectorPickerViewModel() {
   const tooLarge = lineCount > MAX_LINE_COUNT;
 
   const selectedLineSet = useMemo(
-    () => new Set(selected.map((s) => s.line)),
+    () => new Set(selected.flatMap((s) => (s.line === null ? [] : [s.line]))),
     [selected],
   );
 
@@ -74,9 +69,21 @@ export function useSelectorPickerViewModel() {
       return;
     }
     setError(null);
+    setRenderError(null);
+    setRenderedPage(null);
+    setActiveTab("html");
     setStep("loading");
     try {
-      const html = await fetchHtml(trimmed);
+      let html: string;
+      try {
+        const rendered = await fetchRenderedPage(trimmed);
+        setRenderedPage(rendered);
+        html = rendered.html;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        setRenderError(`렌더링 스냅샷을 가져오지 못했습니다: ${message}`);
+        html = await fetchHtml(trimmed);
+      }
       setRawHtml(html);
       const minified = isMinified(html);
       if (minified) {
@@ -147,6 +154,16 @@ export function useSelectorPickerViewModel() {
     [lineIndex],
   );
 
+  const handleRenderedElementClick = useCallback((element: RenderedElement) => {
+    setSelected((prev) => {
+      const existingIdx = prev.findIndex((s) => s.selector === element.selector);
+      if (existingIdx >= 0) {
+        return prev.filter((_, i) => i !== existingIdx);
+      }
+      return [...prev, { line: null, selector: element.selector }];
+    });
+  }, []);
+
   const handleRemoveSelected = useCallback((idx: number) => {
     setSelected((prev) => prev.filter((_, i) => i !== idx));
   }, []);
@@ -154,13 +171,15 @@ export function useSelectorPickerViewModel() {
   const handleConfirm = useCallback(async () => {
     if (selected.length === 0) return;
     const value = selected.map((s) => s.selector).join(", ");
+    const payload = {
+      target: hash.target,
+      value,
+    };
     try {
       if (hash.parent) {
-        await emitTo(hash.parent, "selector-picked", {
-          target: hash.target,
-          value,
-        });
+        await emitTo(hash.parent, "selector-picked", payload);
       }
+      await emit("selector-picked", payload);
     } finally {
       try {
         await closeWindow(hash.windowLabel);
@@ -188,6 +207,10 @@ export function useSelectorPickerViewModel() {
     url,
     setUrl,
     error,
+    renderError,
+    renderedPage,
+    activeTab,
+    setActiveTab,
     displayHtml,
     lineIndex,
     lineCount,
@@ -196,10 +219,12 @@ export function useSelectorPickerViewModel() {
     isPrettifying,
     selected,
     selectedLineSet,
+    selectedSelectors: selected.map((s) => s.selector),
     handleConfirmUrl,
     handleRetry,
     handleTogglePretty,
     handleLineClick,
+    handleRenderedElementClick,
     handleRemoveSelected,
     handleConfirm,
     handleCancel,

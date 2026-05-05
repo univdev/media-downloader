@@ -5,6 +5,12 @@ export { deleteSequence } from "./api/deleteSequence";
 export { importSequence } from "./api/importSequence";
 export { exportSequence } from "./api/exportSequence";
 export { fetchHtml } from "./api/fetchHtml";
+export { fetchRenderedPage } from "./api/fetchRenderedPage";
+export type {
+  RenderedElement,
+  RenderedElementRect,
+  RenderedPagePayload,
+} from "./api/fetchRenderedPage";
 export { prettifyHtml } from "./api/prettifyHtml";
 export { closeWindow } from "./api/closeWindow";
 export { openSequenceEditor } from "./api/openSequenceEditor";

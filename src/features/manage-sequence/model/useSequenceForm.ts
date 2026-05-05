@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { Sequence } from "@/entities/sequence";
 
 export interface SequenceFormErrors {
@@ -58,6 +58,26 @@ export function useSequenceForm(initial?: Sequence) {
   const [description, setDescription] = useState(initial?.meta.description ?? "");
   const [errors, setErrors] = useState<SequenceFormErrors>({});
   const urlPattern = matchPatterns[0] ?? "";
+
+  useEffect(() => {
+    if (!initial) return;
+    const nextMatchPatterns =
+      initial.match_patterns && initial.match_patterns.length > 0
+        ? initial.match_patterns
+        : [initial.url_pattern ?? ""];
+    setMatchPatterns(nextMatchPatterns);
+    setCrawlUrlPattern(
+      initial.crawl_url_pattern ?? initial.media_url_pattern ?? initial.url_pattern ?? "",
+    );
+    setMediaUrlPattern(initial.media_url_pattern ?? "");
+    setMediaSelector(initial.selectors.media ?? "");
+    setFolderNameSelector(initial.selectors.folder_name ?? "");
+    setFolderPattern(initial.naming.folder ?? "");
+    setFolderSource(initial.naming.folder_source ?? "literal");
+    setName(initial.meta.name ?? "");
+    setDescription(initial.meta.description ?? "");
+    setErrors({});
+  }, [initial]);
 
   const setUrlPattern = useCallback((value: string) => {
     setMatchPatterns((prev) => {

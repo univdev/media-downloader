@@ -1,6 +1,8 @@
 import { useSelectorPickerViewModel } from "../model/useSelectorPickerViewModel";
 import { HtmlSourceView } from "./HtmlSourceView";
 import { SelectedList } from "./SelectedList";
+import { SnapshotCanvas } from "./SnapshotCanvas";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
 export function SelectorPickerPage() {
   const vm = useSelectorPickerViewModel();
@@ -79,37 +81,62 @@ export function SelectorPickerPage() {
       {vm.step === "ready" && (
         <section className="flex-1 grid grid-cols-[1fr_320px] gap-4 min-h-0">
           <div className="flex flex-col gap-2 min-h-0">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-zinc-500">
-                {vm.lineCount} 라인 {vm.isPretty && "· 정리됨"}
-              </p>
-              <button
-                type="button"
-                disabled={vm.isPrettifying}
-                onClick={vm.handleTogglePretty}
-                className="text-xs underline disabled:opacity-50"
-              >
-                {vm.isPretty ? "원본 보기" : "정리하기"}
-              </button>
-            </div>
-            {vm.tooLarge ? (
-              <p className="text-sm text-red-500">
-                HTML이 너무 큽니다 ({vm.lineCount} 라인). 5만 라인 이하만 지원합니다.
-              </p>
-            ) : (
-              <div className="flex-1 min-h-0 overflow-auto">
-                <HtmlSourceView
-                  html={vm.displayHtml}
-                  selectedLines={vm.selectedLineSet}
-                  onLineClick={vm.handleLineClick}
-                  clickableLines={new Set(vm.lineIndex.keys())}
-                />
+            <Tabs value={vm.activeTab} onValueChange={(value) => vm.setActiveTab(value as typeof vm.activeTab)} className="min-h-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <TabsList>
+                  <TabsTrigger value="html">HTML</TabsTrigger>
+                  <TabsTrigger value="snapshot" disabled={!vm.renderedPage}>
+                    스냅샷
+                  </TabsTrigger>
+                </TabsList>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-zinc-500">
+                    {vm.lineCount} 라인 {vm.isPretty && "· 정리됨"}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={vm.isPrettifying}
+                    onClick={vm.handleTogglePretty}
+                    className="text-xs underline disabled:opacity-50"
+                  >
+                    {vm.isPretty ? "원본 보기" : "정리하기"}
+                  </button>
+                </div>
               </div>
-            )}
+
+              {vm.renderError && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">{vm.renderError}</p>
+              )}
+
+              <TabsContent value="html" className="min-h-0">
+                {vm.tooLarge ? (
+                  <p className="text-sm text-red-500">
+                    HTML이 너무 큽니다 ({vm.lineCount} 라인). 5만 라인 이하만 지원합니다.
+                  </p>
+                ) : (
+                  <div className="h-full min-h-0 overflow-auto">
+                    <HtmlSourceView
+                      html={vm.displayHtml}
+                      selectedLines={vm.selectedLineSet}
+                      onLineClick={vm.handleLineClick}
+                      clickableLines={new Set(vm.lineIndex.keys())}
+                    />
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="snapshot" className="min-h-0">
+                <SnapshotCanvas
+                  page={vm.renderedPage}
+                  selectedSelectors={vm.selectedSelectors}
+                  onElementClick={vm.handleRenderedElementClick}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
           <aside className="border-l pl-4 overflow-auto">
             <SelectedList
-              selectors={vm.selected.map((s) => s.selector)}
+              selectors={vm.selectedSelectors}
               onRemove={vm.handleRemoveSelected}
             />
           </aside>

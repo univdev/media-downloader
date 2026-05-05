@@ -65,6 +65,7 @@ pub async fn start_download_by_url(
     sequence.url_pattern = resolved.to_pattern_string();
     sequence.media_url_pattern = None;
     sequence.crawl_url_pattern = None;
+    sequence.naming.folder = apply_string_captures(&sequence.naming.folder, &match_result.captures);
     let sequence_json = serde_json::to_string(&sequence).map_err(|e| e.to_string())?;
 
     // 4. DB insert + engine spawn (기존 start_download 본문 그대로)
@@ -101,6 +102,32 @@ pub async fn start_download_by_url(
     });
 
     Ok(download_id)
+}
+
+fn apply_string_captures(input: &str, captures: &HashMap<String, String>) -> String {
+    let mut resolved = input.to_string();
+    for (name, value) in captures {
+        resolved = resolved.replace(&format!("{{{}}}", name), value);
+    }
+    resolved
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_string_captures;
+    use std::collections::HashMap;
+
+    #[test]
+    fn apply_string_captures_resolves_folder_tokens() {
+        let mut captures = HashMap::new();
+        captures.insert("id".to_string(), "3921679".to_string());
+        captures.insert("slug".to_string(), "sample-title".to_string());
+
+        assert_eq!(
+            apply_string_captures("{slug}-{id}", &captures),
+            "sample-title-3921679"
+        );
+    }
 }
 
 #[tauri::command]

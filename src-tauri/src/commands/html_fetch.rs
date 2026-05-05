@@ -1,10 +1,51 @@
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
+use tokio::process::Command;
+use tokio::time::timeout;
 
 /// Maximum HTML body size accepted from `fetch_html` (10 MB).
 ///
 /// Exposed (`pub(crate)`) so unit tests can reference the same constant
 /// without duplicating the literal — keeps cap logic and tests in lockstep.
 pub(crate) const MAX_HTML_SIZE: usize = 10 * 1024 * 1024;
+const RENDER_TIMEOUT: Duration = Duration::from_secs(70);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderedElementRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderedElement {
+    pub selector: String,
+    pub tag_name: String,
+    pub source_url: Option<String>,
+    pub rect: RenderedElementRect,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderedPagePayload {
+    pub render_id: String,
+    pub html: String,
+    pub snapshot_data_url: Option<String>,
+    pub viewport_width: f64,
+    pub viewport_height: f64,
+    pub elements: Vec<RenderedElement>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RenderedPageFromBrowser {
+    pub html: String,
+    pub snapshot_data_url: Option<String>,
+    pub viewport_width: f64,
+    pub viewport_height: f64,
+    pub elements: Vec<RenderedElement>,
+}
 
 /// Pure size-check used inside `fetch_html`.
 ///
@@ -48,6 +89,86 @@ pub async fn fetch_html(url: String) -> Result<String, String> {
     check_html_size(bytes.len())?;
 
     String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string())
+}
+
+/// Render a page in a real headless Chromium instance and return the post-CSR
+/// DOM plus a full-page PNG screenshot. The regular `fetch_html` command
+/// remains the static HTML path for source-based selector picking.
+#[tauri::command]
+pub async fn fetch_rendered_page(
+    _app: tauri::AppHandle,
+    url: String,
+) -> Result<RenderedPagePayload, String> {
+    render_page_payload(&url, true).await
+}
+
+pub(crate) async fn render_page_payload(
+    url: &str,
+    include_snapshot: bool,
+) -> Result<RenderedPagePayload, String> {
+    let parsed = url::Url::parse(&url).map_err(|e| e.to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("URL은 http:// 또는 https://로 시작해야 합니다".to_string());
+    }
+
+    let repo_root = find_repo_root()
+        .ok_or_else(|| "프로젝트 루트를 찾지 못했습니다.".to_string())?;
+    let script = repo_root.join("scripts").join("render-page.mjs");
+
+    let output = timeout(
+        RENDER_TIMEOUT,
+        {
+            let mut command = Command::new("node");
+            command
+                .arg(&script)
+                .arg(parsed.as_str())
+                .current_dir(&repo_root)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            if !include_snapshot {
+                command.arg("--no-screenshot");
+            }
+            command.output()
+        },
+    )
+    .await
+    .map_err(|_| "헤드리스 브라우저 렌더링 시간이 초과되었습니다.".to_string())?
+    .map_err(|e| format!("헤드리스 브라우저 실행에 실패했습니다: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("헤드리스 브라우저 렌더링에 실패했습니다: {stderr}"));
+    }
+
+    let rendered: RenderedPageFromBrowser =
+        serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())?;
+    let payload = RenderedPagePayload {
+        render_id: "playwright".to_string(),
+        html: rendered.html,
+        snapshot_data_url: rendered.snapshot_data_url,
+        viewport_width: rendered.viewport_width,
+        viewport_height: rendered.viewport_height,
+        elements: rendered.elements,
+    };
+
+    check_html_size(payload.html.len())?;
+    Ok(payload)
+}
+
+fn find_repo_root() -> Option<PathBuf> {
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        if has_renderer_script(&dir) {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+fn has_renderer_script(path: &Path) -> bool {
+    path.join("package.json").exists() && path.join("scripts").join("render-page.mjs").exists()
 }
 
 /// Pretty-print HTML for display in the selector picker.

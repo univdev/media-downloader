@@ -66,6 +66,7 @@ pub fn run() {
             window::open_selector_picker,
             window::close_window,
             html_fetch::fetch_html,
+            html_fetch::fetch_rendered_page,
             html_fetch::prettify_html,
         ])
         .run(tauri::generate_context!())

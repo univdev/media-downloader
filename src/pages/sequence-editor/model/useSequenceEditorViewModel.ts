@@ -3,6 +3,7 @@ import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSequenceForm } from "@/features/manage-sequence/model/useSequenceForm";
 import { createSequence } from "@/features/manage-sequence/api/createSequence";
+import { closeWindow as closeWindowCommand } from "@/features/manage-sequence/api/closeWindow";
 import { useTauriEvent } from "@/shared/hooks/useTauriEvent";
 import { useSequenceFormFromHash } from "./useSequenceFormFromHash";
 
@@ -44,6 +45,11 @@ export function useSequenceEditorViewModel() {
       await getCurrentWindow().close();
     } catch (e) {
       console.error("Failed to close window:", e);
+      try {
+        await closeWindowCommand("sequence-editor");
+      } catch (fallbackError) {
+        console.error("Failed to close sequence-editor via command:", fallbackError);
+      }
     }
   }, []);
 
@@ -72,6 +78,7 @@ export function useSequenceEditorViewModel() {
     if (dirtyRef.current) {
       const ok = window.confirm("저장하지 않은 변경사항이 있습니다. 정말 닫으시겠습니까?");
       if (!ok) return;
+      dirtyRef.current = false;
     }
     await closeWindow();
   }, [closeWindow]);
